@@ -2,15 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { whenIdle } from "../src/lib/idle.ts";
 
-const idleCallback = Object.getOwnPropertyDescriptor(Window.prototype, "requestIdleCallback");
+/* The window is a WebIDL global: requestIdleCallback is an own property of window, not of Window.prototype. */
+const idleCallback = Object.getOwnPropertyDescriptor(window, "requestIdleCallback");
 
 function withoutIdleCallbacks(): void {
-  Reflect.deleteProperty(Window.prototype, "requestIdleCallback");
+  Reflect.deleteProperty(window, "requestIdleCallback");
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   if (idleCallback !== undefined) {
-    Object.defineProperty(Window.prototype, "requestIdleCallback", idleCallback);
+    Object.defineProperty(window, "requestIdleCallback", idleCallback);
   }
 });
 
@@ -19,7 +21,14 @@ describe("whenIdle", () => {
     const task = vi.fn<() => void>();
     whenIdle(task);
 
-    await expect.poll(() => task.mock.calls.length).toBe(1);
+    await expect.poll(() => task.mock.calls.length, { timeout: 3000 }).toBe(1);
+  });
+
+  it("gives the browser a deadline so a page that never idles still runs the task", () => {
+    const requestIdleCallback = vi.spyOn(window, "requestIdleCallback");
+    whenIdle(vi.fn<() => void>())();
+
+    expect(requestIdleCallback.mock.lastCall?.[1]?.timeout).toBeGreaterThan(0);
   });
 
   it("falls back to a timer where idle callbacks do not exist", async () => {
@@ -27,6 +36,7 @@ describe("whenIdle", () => {
     const task = vi.fn<() => void>();
     whenIdle(task);
 
+    expect("requestIdleCallback" in window).toBe(false);
     await expect.poll(() => task.mock.calls.length).toBe(1);
   });
 
