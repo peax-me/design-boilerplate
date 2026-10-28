@@ -42,6 +42,13 @@ jobs:
       - run: pnpm test:e2e
       - run: pnpm --filter @repo/web lighthouse
       - uses: actions/upload-artifact@v5
+        if: ${{ !cancelled() }}
+        with:
+          name: lighthouse-reports
+          path: apps/web/.lighthouseci
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: playwright-report
