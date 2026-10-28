@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [".claude/skills/**"],
+  "workspaces": {
+    "apps/web": {
+      "entry": ["e2e/**/*.spec.ts"]
+    },
+    "packages/ui": {
+      "entry": ["src/**/*.{ts,tsx}", "stories/**/*.stories.tsx", "figma/*.figma.ts"],
+      "ignoreDependencies": ["figma"]
+    },
+    "packages/design-audit": {
+      "entry": ["src/*.ts"]
+    },
+    "packages/typescript-config": {
+      "ignoreUnresolved": ["next"]
+    },
+    "tooling": {
+      "entry": ["src/hooks/*.ts"]
+    }
+  }
+}

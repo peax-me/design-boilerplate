@@ -1,0 +1,248 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "jsx-a11y",
+    "nextjs",
+    "import",
+    "promise",
+    "vitest"
+  ],
+  "jsPlugins": ["eslint-plugin-better-tailwindcss"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "settings": {
+    "better-tailwindcss": {
+      "entryPoint": "packages/ui/src/styles/globals.css"
+    },
+    "next": {
+      "rootDir": "apps/web"
+    }
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/storybook-static/**",
+    "**/coverage/**",
+    "**/playwright-report/**",
+    "**/test-results/**",
+    "**/next-env.d.ts",
+    ".claude/skills/**"
+  ],
+  "rules": {
+    "eslint/curly": ["error", "all"],
+    "eslint/no-else-return": [
+      "error",
+      {
+        "allowElseIf": false
+      }
+    ],
+    "eslint/no-nested-ternary": "error",
+    "eslint/max-depth": ["error", 3],
+    "eslint/max-params": ["error", 3],
+    "eslint/complexity": ["error", 10],
+    "eslint/max-lines": [
+      "error",
+      {
+        "max": 250,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eslint/max-lines-per-function": [
+      "error",
+      {
+        "max": 60,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eslint/func-style": ["error", "declaration"],
+    "eslint/eqeqeq": "error",
+    "eslint/prefer-const": "error",
+    "eslint/no-implicit-coercion": "error",
+    "eslint/no-console": "error",
+    "eslint/no-param-reassign": [
+      "error",
+      {
+        "props": true
+      }
+    ],
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "framer-motion",
+            "message": "GSAP is the only animation engine (ADR 0011)."
+          },
+          {
+            "name": "motion",
+            "message": "GSAP is the only animation engine (ADR 0011)."
+          }
+        ]
+      }
+    ],
+    "typescript/return-await": ["error", "in-try-catch"],
+    "typescript/consistent-type-imports": "error",
+    "typescript/consistent-type-exports": "error",
+    "typescript/consistent-type-definitions": ["error", "interface"],
+    "typescript/array-type": [
+      "error",
+      {
+        "default": "array-simple"
+      }
+    ],
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/prefer-readonly": "error",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
+    "import/no-default-export": "error",
+    "import/no-cycle": "error",
+    "import/no-unassigned-import": [
+      "error",
+      {
+        "allow": ["**/*.css"]
+      }
+    ],
+    "oxc/no-barrel-file": "error",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase"
+      }
+    ],
+    "react/react-in-jsx-scope": "off",
+    "react/jsx-boolean-value": "error",
+    "react/self-closing-comp": "error",
+    "react/jsx-curly-brace-presence": "error",
+    "react/jsx-fragments": ["error", "syntax"],
+    "react/no-danger": "error",
+    "jsx-a11y/no-noninteractive-tabindex": [
+      "error",
+      {
+        "tags": ["section"],
+        "roles": ["tabpanel"]
+      }
+    ],
+    "better-tailwindcss/no-unknown-classes": "error",
+    "better-tailwindcss/no-conflicting-classes": "error",
+    "better-tailwindcss/no-duplicate-classes": "error",
+    "better-tailwindcss/no-deprecated-classes": "error",
+    "better-tailwindcss/no-unnecessary-whitespace": "error",
+    "better-tailwindcss/enforce-canonical-classes": "error",
+    "better-tailwindcss/enforce-shorthand-classes": "error",
+    "better-tailwindcss/no-restricted-classes": [
+      "error",
+      {
+        "restrict": [
+          {
+            "pattern": "(^|:)[^:\\[\\]]*\\[[^\\]]*\\]$",
+            "message": "Arbitrary values invent design: add a token to theme.css instead."
+          },
+          {
+            "pattern": "(^|:)[^:]*\\(--[^)]*\\)$",
+            "message": "CSS-variable shorthand bypasses the token scale: use a token utility."
+          },
+          {
+            "pattern": "(^|:)-?m[trblxyse]?-(?!auto$)",
+            "message": "Margins are banned: space elements with the parent's gap (Stack, Inline, Grid)."
+          },
+          {
+            "pattern": "(^|:)p[trblse]-",
+            "message": "Single-side padding breaks symmetry: use p-, px- or py-."
+          },
+          {
+            "pattern": "(^|:)-?space-[xy]-",
+            "message": "space-* utilities are banned: use gap."
+          },
+          {
+            "pattern": "(^|:)-?z-(?!(0|10|20|30|40|50|auto)$)",
+            "message": "Off-scale z-index: use z-0, z-10, z-20, z-30, z-40 or z-50."
+          },
+          {
+            "pattern": "(^|:)(duration|delay)-(?!(0|100|150|200|300|500|700)$)",
+            "message": "Off-scale duration: use 100, 150, 200, 300, 500 or 700."
+          },
+          {
+            "pattern": "(^|:)border(-[xytrblse])?-(?!(0|2)$)\\d",
+            "message": "Off-scale border width: use border, border-0 or border-2."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["packages/ui/stories/**", "packages/ui/tests/**"],
+      "rules": {
+        "nextjs/no-img-element": "off"
+      }
+    },
+    {
+      "files": ["apps/**/*.tsx"],
+      "rules": {
+        "react/forbid-dom-props": [
+          "error",
+          {
+            "forbid": ["className", "style"]
+          }
+        ],
+        "react/forbid-component-props": [
+          "error",
+          {
+            "forbid": ["className", "style"]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/src/app/layout.tsx"],
+      "rules": {
+        "react/forbid-dom-props": [
+          "error",
+          {
+            "forbid": ["style"]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/web/src/app/**/{page,layout,template,default,loading,error,global-error,not-found,icon,apple-icon,opengraph-image,twitter-image,sitemap,robots,manifest}.{ts,tsx}",
+        "**/*.config.ts",
+        "**/.storybook/*.ts",
+        "**/stories/*.stories.tsx",
+        "packages/ui/figma/*.figma.ts"
+      ],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["**/tests/**", "**/e2e/**"],
+      "rules": {
+        "eslint/max-lines-per-function": "off"
+      }
+    },
+    {
+      "files": ["tooling/src/check-adrs.ts", "tooling/src/hooks/**"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    }
+  ]
+}

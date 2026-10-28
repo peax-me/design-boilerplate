@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "sortImports": {},
+  "sortTailwindcss": {
+    "stylesheet": "packages/ui/src/styles/globals.css",
+    "functions": ["cn", "cva"]
+  },
+  "ignorePatterns": [
+    ".claude/skills/**",
+    "pnpm-lock.yaml",
+    "skills-lock.json",
+    "pnpm-workspace.yaml"
+  ]
+}

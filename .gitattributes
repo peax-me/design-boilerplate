@@ -1,0 +1,2 @@
+# Windows launchers keep their line endings.
+*.cmd text eol=crlf
