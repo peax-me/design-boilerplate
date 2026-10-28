@@ -1,0 +1,20 @@
+{
+  "name": "@repo/design-audit",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./collect": "./src/collect.ts",
+    "./analyze": "./src/analyze.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
