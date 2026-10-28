@@ -1,0 +1,65 @@
+{
+  "name": "@repo/ui",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    "./globals.css": "./src/styles/globals.css",
+    "./motion/tokens": "./src/motion/tokens.ts",
+    "./lib/isometric": "./src/lib/isometric.ts",
+    "./components/*": "./src/components/*.tsx",
+    "./layout/*": "./src/layout/*.tsx",
+    "./typography/*": "./src/typography/*.tsx",
+    "./motion/*": "./src/motion/*.tsx"
+  },
+  "scripts": {
+    "dev": "storybook dev --port ${STORYBOOK_PORT:-6006} --no-open",
+    "build": "storybook build --quiet",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@base-ui/react": "catalog:",
+    "@gsap/react": "catalog:",
+    "@react-three/fiber": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
+    "gsap": "catalog:",
+    "lenis": "catalog:",
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "simple-icons": "catalog:",
+    "tailwind-merge": "catalog:",
+    "three": "catalog:"
+  },
+  "devDependencies": {
+    "@figma/code-connect": "catalog:",
+    "@fontsource-variable/bricolage-grotesque": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/jost": "catalog:",
+    "@fontsource/zilla-slab": "catalog:",
+    "@repo/typescript-config": "workspace:*",
+    "@storybook/addon-a11y": "catalog:",
+    "@storybook/addon-docs": "catalog:",
+    "@storybook/addon-vitest": "catalog:",
+    "@storybook/react-vite": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/three": "catalog:",
+    "@vitest/browser": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "playwright": "catalog:",
+    "storybook": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vitest-browser-react": "catalog:"
+  }
+}

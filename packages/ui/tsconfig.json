@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/typescript-config/react-library.json",
+  "compilerOptions": {
+    "types": ["vite/client", "@vitest/browser-playwright", "@figma/code-connect/figma-types"]
+  },
+  "include": ["src", "stories", "tests", ".storybook", "*.ts", "figma"]
+}

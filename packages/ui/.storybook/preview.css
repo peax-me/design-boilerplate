@@ -1,0 +1,12 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/jost";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource/zilla-slab/600.css";
+@import "../src/styles/globals.css";
+
+:root {
+  --font-family-sans: "Geist Variable";
+  --font-family-display: "Jost Variable";
+  --font-family-grotesque: "Bricolage Grotesque Variable";
+  --font-family-slab: "Zilla Slab";
+}
