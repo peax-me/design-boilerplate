@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/adr/**",
+        "$TURBO_ROOT$/.claude/skills/**",
+        "$TURBO_ROOT$/packages/ui/src/styles/theme.css"
+      ]
+    }
+  }
+}
