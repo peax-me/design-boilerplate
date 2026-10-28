@@ -1,0 +1,52 @@
+{
+  "assets": [
+    {
+      "file": "apps/web/public/media/home/maple-grain.webp",
+      "master": "assets/source/home/maple/maple-grain-master.webp",
+      "slot": "hero blocks",
+      "source": "generated",
+      "origin": {
+        "tool": "images_generate",
+        "model": "imagen-nano-banana-2-1",
+        "prompt": "Purpose: tileable wood texture for 3D toy building blocks on a landing page, applied to cubes and planks at small size. Subject: planed natural maple wood, the face of a classic wooden building block. Scene: a flat, evenly lit sample of wood seen straight on, filling the whole frame edge to edge. Look: fine, straight, tight grain running horizontally, satin unfinished surface, pale honey tone, subtle ray flecks, no knots or defects, soft shadowless light so the texture can be relit in 3D. Composition: orthographic top-down view, uniform density across the frame so it tiles seamlessly. Constraints: no text, no logos, no watermark, no objects, no edges or borders.",
+        "creation": "tCyXu4umZJ",
+        "resolution": "2k"
+      },
+      "edits": [
+        "grayscale",
+        "resize 512 px",
+        "auto-level",
+        "sigmoidal contrast 4,55%",
+        "level 45-100%",
+        "webp q80"
+      ],
+      "license": {
+        "type": "magnific-ai-commercial",
+        "plan": "premium",
+        "attributionRequired": false,
+        "indemnified": false
+      },
+      "credits": 260,
+      "approvedBy": "user (spend); variant choice pending",
+      "date": "2026-10-28"
+    },
+    {
+      "file": "apps/web/src/features/home/images/figma-library.webp",
+      "master": "assets/source/home/figma/figma-library.png",
+      "slot": "figma section",
+      "source": "repository",
+      "origin": {
+        "owner": "project",
+        "licenceNote": "Export of the project's own Figma library (file 0WtO809qZsF4yAmfPoIPGW, node 33:10)"
+      },
+      "edits": ["download_assets at 2x", "resize 1600 px", "webp"],
+      "license": {
+        "type": "own-work",
+        "attributionRequired": false
+      },
+      "credits": 0,
+      "approvedBy": "user (D2)",
+      "date": "2026-10-28"
+    }
+  ]
+}
