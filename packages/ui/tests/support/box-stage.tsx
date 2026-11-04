@@ -1,27 +1,25 @@
-import type { ReactNode } from "react";
+import type { ComponentProps } from "react";
 
 import { IsoBlocks } from "../../src/components/iso-blocks.tsx";
 import { whenIdle } from "../../src/lib/idle.ts";
-import { type SceneProps, Stage } from "../../src/motion/stage.tsx";
+import { Stage } from "../../src/motion/stage.tsx";
 import { plainBox, plainScene } from "../../stories/support/plain-scene.tsx";
-import { pause } from "./pause.ts";
+import { pause, SETTLE_MS } from "./pause.ts";
 
-/* Time for the work an idle stage starts (tier, observers, listeners) to settle. */
-const SETTLE_MS = 500;
+type StageProps = ComponentProps<typeof Stage>;
 
-interface BoxStageProps {
+interface BoxStageProps extends Omit<StageProps, "poster" | "renderScene"> {
   name: string;
-  ambient?: boolean;
-  renderScene?: (scene: SceneProps) => ReactNode;
+  renderScene?: StageProps["renderScene"];
 }
 
 /* A stage with a named drawing of a box as its poster and, unless told otherwise, the neutral box as its scene. */
-export function BoxStage({ name, ambient = false, renderScene = plainScene }: BoxStageProps) {
+export function BoxStage({ name, renderScene = plainScene, ...stageProps }: BoxStageProps) {
   return (
     <Stage
       poster={<IsoBlocks blocks={plainBox} label={name} />}
       renderScene={renderScene}
-      ambient={ambient}
+      {...stageProps}
     />
   );
 }

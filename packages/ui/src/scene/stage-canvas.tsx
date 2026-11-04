@@ -1,12 +1,13 @@
 "use client";
 
-import { Canvas, type CanvasProps, useThree } from "@react-three/fiber";
+import { Canvas, type CanvasProps, type RootState, useStore, useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 
 import { pixelRatio, type QualityTier } from "../lib/quality-tier.ts";
+import { StagePlaybackContext } from "../motion/stage-playback.tsx";
 
-/* A frame moves a scene by this much at most: a pause (offscreen, background tab) is not replayed, and a slow device still moves. */
+/* A frame moves a scene by this much at most: a pause (offscreen, paused by the visitor, background tab) is not replayed, and a slow device still moves. */
 const MAX_FRAME_DELTA_SECONDS = 0.1;
 
 /* R3F renders only when advanced (frameloop "never"). GSAP's ticker is the one clock for every scene, and a canvas outside the window costs no frame.
@@ -43,11 +44,34 @@ function TickerFrames(): null {
   return null;
 }
 
+function resized(state: RootState, previous: RootState): boolean {
+  return state.size.width !== previous.size.width || state.size.height !== previous.size.height;
+}
+
+/* Resizing clears the canvas and nothing advances a paused scene: it draws the same frame again, at the same time. */
+function HeldFrame(): null {
+  const store = useStore();
+
+  useEffect(
+    () =>
+      store.subscribe((state, previous) => {
+        if (resized(state, previous)) {
+          state.advance(state.clock.elapsedTime);
+        }
+      }),
+    [store],
+  );
+
+  return null;
+}
+
 interface StageCanvasProps extends Omit<CanvasProps, "dpr" | "frameloop" | "gl"> {
   tier: QualityTier;
 }
 
 export function StageCanvas({ tier, children, ...canvasProps }: StageCanvasProps) {
+  const { paused } = use(StagePlaybackContext);
+
   return (
     <Canvas
       {...canvasProps}
@@ -55,7 +79,7 @@ export function StageCanvas({ tier, children, ...canvasProps }: StageCanvasProps
       frameloop="never"
       gl={{ antialias: tier === "full" }}
     >
-      <TickerFrames />
+      {paused ? <HeldFrame /> : <TickerFrames />}
       {children}
     </Canvas>
   );

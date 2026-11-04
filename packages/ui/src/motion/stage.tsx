@@ -19,6 +19,7 @@ import {
   tierFor,
 } from "../lib/quality-tier.ts";
 import { SceneBoundary } from "../scene/scene-boundary.tsx";
+import { StagePlayback } from "./stage-playback.tsx";
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 /* A scene loads once it comes within half a window height of the viewport. */
@@ -165,8 +166,12 @@ interface StageProps {
   poster: ReactNode;
   /* Renders a lazy component holding a StageCanvas; it calls onReady once its first frame is drawn. */
   renderScene: (props: SceneProps) => ReactNode;
-  /* The scene moves on its own: the motion audit expects its frames to change. */
+  /* The scene moves on its own: the motion audit expects its frames to change, and once live it gets a control to pause it (WCAG 2.2.2). */
   ambient?: boolean;
+  /* Names of that control, after the action it performs. */
+  pauseLabel?: string;
+  playLabel?: string;
+  /* Sizing the stage sizes its poster layer too, so a poster can cover it; an unsized stage takes the size of its poster. */
   className?: string;
 }
 
@@ -174,6 +179,8 @@ export function Stage({
   poster,
   renderScene,
   ambient = false,
+  pauseLabel = "Pause animation",
+  playLabel = "Play animation",
   className,
 }: StageProps): ReactElement {
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
@@ -194,13 +201,15 @@ export function Stage({
       data-ambient={ambient ? "" : undefined}
       className={cn("relative", className)}
     >
-      <div className={fadeVariants({ shown: !live })}>{poster}</div>
+      <div className={cn("size-full", fadeVariants({ shown: !live }))}>{poster}</div>
       {tier === null ? null : (
-        <div aria-hidden className={cn("absolute inset-0", fadeVariants({ shown: live }))}>
-          <SceneBoundary onError={fallBack}>
-            <Suspense fallback={null}>{renderScene({ tier, onReady })}</Suspense>
-          </SceneBoundary>
-        </div>
+        <StagePlayback controllable={ambient && live} pauseLabel={pauseLabel} playLabel={playLabel}>
+          <div aria-hidden className={cn("absolute inset-0", fadeVariants({ shown: live }))}>
+            <SceneBoundary onError={fallBack}>
+              <Suspense fallback={null}>{renderScene({ tier, onReady })}</Suspense>
+            </SceneBoundary>
+          </div>
+        </StagePlayback>
       )}
     </div>
   );

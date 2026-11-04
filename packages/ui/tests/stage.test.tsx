@@ -42,6 +42,10 @@ function sceneLayerIn(stage: HTMLElement): Element | null {
   return stage.querySelector(":scope > [aria-hidden]");
 }
 
+function boxOf(element: Element | null | undefined): unknown {
+  return element?.getBoundingClientRect().toJSON();
+}
+
 function tierIn(element: HTMLElement): string | undefined {
   return element.querySelector<HTMLElement>("[data-tier]")?.dataset["tier"];
 }
@@ -183,6 +187,22 @@ describe("Stage", () => {
 
     await expect.poll(() => stage.dataset["stage"]).toBe("poster");
     expect(canvasIn(stage)).toBeNull();
+  });
+
+  it("gives the poster layer of a stage sized by its class the box of the stage", async () => {
+    const screen = await render(<BoxStage name="Sized box" className="h-48" />);
+    const stage = stageAt(screen.container);
+
+    expect(boxOf(stage.firstElementChild)).toEqual(boxOf(stage));
+  });
+
+  it("sizes a stage without a size from its poster", async () => {
+    const screen = await render(<BoxStage name="Fitted box" />);
+    const stage = stageAt(screen.container);
+    const poster = screen.getByRole("img", { name: "Fitted box" }).element();
+
+    expect(stage.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(stage.getBoundingClientRect().height).toBe(poster.getBoundingClientRect().height);
   });
 
   it("marks an ambient stage for the motion audit", async () => {

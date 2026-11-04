@@ -38,11 +38,12 @@ This ADR supersedes ADR-0019 entirely. Its decisions that still hold are restate
 
 `Stage` holds no effect: each project passes its own scene. Its contract:
 
-- The still poster renders first and is the LCP element.
+- The still poster renders first and is the LCP element. A stage sized by its class sizes the poster layer, so a poster can cover a full-bleed stage.
 - The canvas is client-only and loads after idle, when the scene approaches the viewport. A scene outside the viewport loads nothing and computes no frame.
 - Under reduced motion or without WebGL2, the poster stays alone, the page is complete and no `canvas` exists. Reduced motion enabled after load, or a lost WebGL context, unmounts the scene and brings the poster back.
 - One clock: `frameloop="never"`, advanced by `gsap.ticker`.
 - An accessible name.
+- A scene that moves on its own (`ambient`) gets, once live, a control that pauses and plays it (WCAG 2.2.2): a paused canvas draws no new frame.
 - A progress channel wired to `ScrollScene`.
 - `BlockStage` becomes the first user of `Stage`.
 
