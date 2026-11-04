@@ -1,11 +1,12 @@
 # Particle scene
 
-Four modules and their test, all typechecked, linted and formatted as written in this repository, and run in a browser (Vitest browser mode, the package's own set-up):
+Four modules and their tests, checked as written in this repository (typecheck, `oxlint --type-aware`, `oxfmt`) and run in Vitest browser mode, the package's own set-up:
 
-- `tests/<effect>-morph.test.tsx` (below): at progress 0, 0.5 and 1, the farthest of 32,768 particles is exactly 0 from shapes 1, 2 and 3, whatever its seed; after the simulation holds at 0.5 for 10 s (curl off), the farthest particle is 1.1e-6 from the middle shape. With the former whole-range stagger, the same test fails: 0.397 off the middle shape.
-- The mounted scene draws the first shape on its first frame, morphs through three shapes, parts under a mouse at the centre (lit pixels there fell from 2,592 to 121) and heals once the pointer leaves the document.
+- `tests/<effect>-morph.test.tsx`: at progress 0, 0.5 and 1, the farthest of 32,768 particles is within 1e-6 of shapes 1, 2 and 3 (measured 0), whatever its seed, both for the seed-order stagger and for the `SWEEP` stagger; after the simulation holds at 0.5 for 10 s (curl off), the farthest particle is 1.1e-6 from the middle shape. With the former whole-range stagger, the first case fails at 0.397.
+- `tests/<effect>-scene.test.tsx`: under StrictMode, the first frame draws the first shape (more than 300 lit pixels on a 64×36 grid). With the simulation created during render and disposed in a cleanup, the same test fails at 52: the particles restart from the origin.
+- The mounted scene morphs through three shapes, parts under a mouse at the centre (lit pixels there fell from 2,592 to 121) and heals once the pointer leaves the document.
 
-Shared GLSL comes from `shader-chunks.ts` (`shader-craft` `references/shader-chunks.md`): these modules import it, never copy it. Split this way because the lint caps a file at 250 lines and 10 imports, and a function at 60 lines. Rename `particle` to the effect's name.
+Shared code comes from `shader-craft` (`references/shader-chunks.md` for the GLSL, `references/effect-skeleton.md` for `useSceneResource` and the test support): these modules import it, never copy it. Split this way because the lint caps a file at 250 lines and 10 imports, and a function at 60 lines. Rename `particle` to the effect's name.
 
 ## `packages/ui/src/scene/<effect>-shaders.ts`
 
@@ -14,14 +15,21 @@ import { CURL_NOISE, HASH } from "./shader-chunks.ts";
 
 /* Where a particle heads at a scroll progress. The stagger is local to each segment between two shapes,
    so at progress k / (SHAPES - 1) every particle sits exactly on shape k: each shape can be held and read.
-   seed in 0..1 delays the particle inside the segment; blend reports how far it has gone (0 to 1). */
+   Particles leave in seed order (a dissolve), or by height on the target shape when SWEEP is defined (from the
+   bottom up). blend reports how far the particle has gone, from 0 to 1. */
 export const MORPH_GOAL = `
   vec3 morphGoal(vec2 uv, float progress, float seed, out float blend) {
     float segment = clamp(progress, 0.0, 1.0) * float(SHAPES - 1);
     float layer = min(floor(segment), float(SHAPES - 2));
-    float local = segment - layer;
-    blend = smoothstep(0.0, 1.0, clamp(local * (1.0 + STAGGER) - seed * STAGGER, 0.0, 1.0));
-    return mix(texture(uShapes, vec3(uv, layer)).xyz, texture(uShapes, vec3(uv, layer + 1.0)).xyz, blend);
+    vec3 from = texture(uShapes, vec3(uv, layer)).xyz;
+    vec3 to = texture(uShapes, vec3(uv, layer + 1.0)).xyz;
+  #ifdef SWEEP
+    float order = clamp(to.y * 0.5 + 0.5, 0.0, 1.0);
+  #else
+    float order = seed;
+  #endif
+    blend = smoothstep(0.0, 1.0, clamp((segment - layer) * (1.0 + STAGGER) - order * STAGGER, 0.0, 1.0));
+    return mix(from, to, blend);
   }
 `;
 
@@ -109,12 +117,12 @@ import type { QualityTier } from "../lib/quality-tier.ts";
 import { POINTS_FRAGMENT, POINTS_VERTEX, POSITION, VELOCITY } from "./particle-shaders.ts";
 
 /* 32,768 particles on light devices, 131,072 on full ones: one texel each. */
-export const GRID: Record<QualityTier, [width: number, height: number]> = {
+const GRID: Record<QualityTier, [width: number, height: number]> = {
   light: [256, 128],
   full: [512, 256],
 };
 /* Point size in CSS pixels at one world unit from the camera. Fewer, larger points on light devices keep the same coverage: size grows with √(131,072 / 32,768). */
-export const POINT_SIZE: Record<QualityTier, number> = { light: 16, full: 8 };
+const POINT_SIZE: Record<QualityTier, number> = { light: 16, full: 8 };
 
 /* One layer per shape, one texel per particle, in the order the sampling script wrote them. */
 export function shapeLayers(
@@ -218,6 +226,33 @@ export function createPoints(grid: [number, number], tier: QualityTier, pixelRat
 }
 
 type PointUniforms = ReturnType<typeof createPoints>["uniforms"];
+
+/* Everything the scene draws with, made and released together (see useSceneResource). */
+export function createParticles(
+  gl: WebGLRenderer,
+  files: unknown[],
+  tier: QualityTier,
+) {
+  const grid = GRID[tier];
+  const layers = shapeLayers(
+    files.filter((file) => file instanceof ArrayBuffer),
+    grid,
+  );
+  return {
+    layers,
+    simulation: createSimulation(gl, layers, grid),
+    points: createPoints(grid, tier, gl.getPixelRatio()),
+  };
+}
+
+export type Particles = ReturnType<typeof createParticles>;
+
+export function disposeParticles({ layers, simulation, points }: Particles): void {
+  simulation.compute.dispose();
+  layers.dispose();
+  points.geometry.dispose();
+  points.material.dispose();
+}
 
 /* Mutations live outside the component: the React Compiler lint rejects writing to hook values in useFrame.
    The camera is copied every frame, so the pointer ray stays right when the choreography moves the camera. */
@@ -335,15 +370,15 @@ export function usePointerForce({ uPointer, uPointerStrength }: Simulation["unif
 "use client";
 
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
-import { useEffect, useState } from "react";
 import { FileLoader, Vector3 } from "three";
 
 import type { QualityTier } from "../lib/quality-tier.ts";
 import type { SceneProps } from "../motion/stage.tsx";
 import { usePointerForce } from "./particle-pointer.ts";
-import { createPoints, createSimulation, GRID, shapeLayers, step } from "./particle-simulation.ts";
+import { createParticles, disposeParticles, type Particles, step } from "./particle-simulation.ts";
 import { StageCanvas } from "./stage-canvas.tsx";
 import { useFirstFrame } from "./use-first-frame.ts";
+import { useSceneResource } from "./use-scene-resource.ts";
 
 interface ParticleSceneProps extends SceneProps {
   /* Public URLs of every shape for each tier, in morph order, built by the app with NEXT_PUBLIC_BASE_PATH. */
@@ -352,32 +387,13 @@ interface ParticleSceneProps extends SceneProps {
   progress: { value: number };
 }
 
-function Particles({ tier, onReady, shapes, progress }: ParticleSceneProps) {
-  const gl = useThree((state) => state.gl);
-  const grid = GRID[tier];
-  const buffers = useLoader(FileLoader, shapes[tier], (loader) => {
-    loader.setResponseType("arraybuffer");
-  });
-  const [simulation] = useState(() =>
-    createSimulation(
-      gl,
-      shapeLayers(
-        buffers.filter((buffer) => buffer instanceof ArrayBuffer),
-        grid,
-      ),
-      grid,
-    ),
-  );
-  const pixelRatio = useThree((state) => state.viewport.dpr);
-  const [points] = useState(() => createPoints(grid, tier, pixelRatio));
-  useEffect(
-    () => () => {
-      simulation.compute.dispose();
-      points.geometry.dispose();
-      points.material.dispose();
-    },
-    [simulation, points],
-  );
+/* Rendered once the simulation exists, so the first frame it reports is a drawn one. */
+function ParticleFrame({
+  particles,
+  onReady,
+  progress,
+}: { particles: Particles } & Pick<ParticleSceneProps, "onReady" | "progress">) {
+  const { simulation, points } = particles;
   usePointerForce(simulation.uniforms);
   useFirstFrame(onReady);
   useFrame((state, delta) => {
@@ -390,10 +406,21 @@ function Particles({ tier, onReady, shapes, progress }: ParticleSceneProps) {
   return <points geometry={points.geometry} material={points.material} frustumCulled={false} />;
 }
 
+function ParticleField({ tier, onReady, shapes, progress }: ParticleSceneProps) {
+  const gl = useThree((state) => state.gl);
+  const files = useLoader(FileLoader, shapes[tier], (loader) => {
+    loader.setResponseType("arraybuffer");
+  });
+  const particles = useSceneResource(createParticles, disposeParticles, gl, files, tier);
+  return particles === null ? null : (
+    <ParticleFrame particles={particles} onReady={onReady} progress={progress} />
+  );
+}
+
 export function ParticleScene(props: ParticleSceneProps) {
   return (
     <StageCanvas tier={props.tier} flat camera={{ position: new Vector3(0, 0, 4.5), fov: 35 }}>
-      <Particles {...props} />
+      <ParticleField {...props} />
     </StageCanvas>
   );
 }
@@ -401,7 +428,7 @@ export function ParticleScene(props: ParticleSceneProps) {
 
 ## `packages/ui/tests/<effect>-morph.test.tsx`
 
-Write it before `MORPH_GOAL`: the first case renders the goal of every particle into a float target with `GPUComputationRenderer`'s own helpers and compares it with each shape; the second runs the real simulation with the curl off and measures how far the particles end from the middle shape.
+Write it before `MORPH_GOAL`: the first case renders the goal of every particle into a float target with `GPUComputationRenderer`'s own helpers and compares it with each shape, for both stagger orders; the second runs the real simulation with the curl off and measures how far the particles end from the middle shape.
 
 ```tsx
 import {
@@ -429,6 +456,8 @@ const COUNT = GRID[0] * GRID[1];
 const SHAPES = 3;
 const STAGGER = 0.35;
 const FRAME = 1 / 60;
+/* Float32 positions: a goal that sits on its shape is within rounding of it. */
+const ON_SHAPE = 1e-6;
 const SETTLE_FRAMES = 600;
 
 /* Three unlike shapes in the shared frame: a sphere, a flat disc and a vertical line. */
@@ -474,7 +503,10 @@ const [sphere, disc, line] = [
 ];
 
 describe("three-shape morph", () => {
-  it("puts every particle exactly on shape k at progress k / 2, whatever its seed", () => {
+  it.each([
+    ["seed order (a dissolve)", {}],
+    ["height on the target shape (a sweep)", { SWEEP: "" }],
+  ])("puts every particle on shape k at progress k / 2, leaving in %s", (_order, sweep) => {
     const renderer = new WebGLRenderer();
     const compute = new GPUComputationRenderer(GRID[0], GRID[1], renderer);
     const seeds = new DataTexture(
@@ -501,7 +533,7 @@ describe("three-shape morph", () => {
         uProgress: { value: 0 },
       },
     );
-    Object.assign(material.defines, { SHAPES, STAGGER: String(STAGGER) });
+    Object.assign(material.defines, { SHAPES, STAGGER: String(STAGGER), ...sweep });
     const target = compute.createRenderTarget(
       GRID[0],
       GRID[1],
@@ -521,7 +553,7 @@ describe("three-shape morph", () => {
       return farthestFrom(layer, readTarget(renderer, target));
     });
 
-    expect(misses).toEqual([0, 0, 0]);
+    expect(Math.max(...misses)).toBeLessThan(ON_SHAPE);
   });
 
   it("settles every particle on the middle shape when the scroll holds at 0.5", () => {
@@ -543,10 +575,64 @@ describe("three-shape morph", () => {
 });
 ```
 
+## `packages/ui/tests/<effect>-scene.test.tsx`
+
+The shape is generated in the test and served from memory, so the test needs no fixture file.
+
+```tsx
+import { StrictMode } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { render } from "vitest-browser-react";
+
+import { ParticleScene } from "../src/scene/particle-scene.tsx";
+import { canvasIn, canvasPixels, countPixels } from "./support/canvas-pixels.ts";
+
+const COUNT = 32_768;
+
+/* A unit sphere sampled evenly, served from memory like a sampled shape file. */
+function sphereUrl(): string {
+  const points = new Float32Array(COUNT * 3);
+  for (let index = 0; index < COUNT; index += 1) {
+    const height = 1 - ((index + 0.5) / COUNT) * 2;
+    const ring = Math.sqrt(1 - height * height);
+    const angle = index * 2.399_963;
+    points.set([Math.cos(angle) * ring, height, Math.sin(angle) * ring], index * 3);
+  }
+  return URL.createObjectURL(new Blob([points.buffer]));
+}
+
+describe("particle scene under StrictMode", () => {
+  it("draws the first shape on its first frame after the double mount of development", async () => {
+    const sphere = sphereUrl();
+    const ready = vi.fn<() => void>();
+    const screen = await render(
+      <StrictMode>
+        <div style={{ width: 320, height: 180, position: "relative", background: "black" }}>
+          <ParticleScene
+            tier="light"
+            onReady={ready}
+            progress={{ value: 0 }}
+            shapes={{ light: [sphere, sphere], full: [sphere, sphere] }}
+          />
+        </div>
+      </StrictMode>,
+    );
+    await expect.poll(() => ready.mock.calls.length, { timeout: 15_000 }).toBe(1);
+
+    const lit = countPixels(await canvasPixels(canvasIn(screen.container)), (red, green, blue) => {
+      return red + green + blue > 120;
+    });
+
+    expect(lit).toBeGreaterThan(300);
+  });
+});
+```
+
 Why it is shaped this way:
 
+- The layers, the simulation and the points are made in the effect that disposes them (`useSceneResource`): under StrictMode in development, a `GPUComputationRenderer` created during render and disposed by the first cleanup loses its positions, and the particles restart from the origin. `ParticleFrame` renders once they exist, so `useFirstFrame` reports a drawn frame.
 - Materials are built imperatively (`new ShaderMaterial({ uniforms })`), and the simulation's uniforms are typed objects the materials keep: React Three Fiber 9 copies a `uniforms` prop into new objects, so writes to yours would never reach the GPU.
 - Uniform writes happen in module-level functions (`step`): the React Compiler lint rejects writing to hook values inside `useFrame`. `step` copies the camera position every frame, so the pointer ray stays right when the choreography moves the camera.
-- `createSimulation` runs during render: a missing float extension or a failed `init()` throws there, `SceneBoundary` catches it and the poster stays.
-- `useLoader(FileLoader, …)` suspends until the shapes arrive; the stage keeps its poster meanwhile.
+- `createSimulation` throws when the float extension is missing and `init()` fails: the error reaches `SceneBoundary` and the poster stays.
+- `useLoader(FileLoader, …)` suspends until the shapes arrive; the stage keeps its poster meanwhile. Its result is cached, so it is a stable input of `useSceneResource`.
 - The effect component composes `Stage` like any effect (`shader-craft` `references/effect-skeleton.md`, `ambient` because the shape breathes at rest) and passes `shapes` (URLs per tier, built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`) and `progress` to this scene.

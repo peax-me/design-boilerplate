@@ -18,12 +18,12 @@ Run it on the source models of one stage together, never on optimised GLBs (`exe
 ```bash
 mkdir -p apps/web/public/media/<feature>
 pnpm --filter @repo/ui exec node scripts/sample-shapes.ts --out ../../apps/web/public/media/<feature> \
-  --sort height --weight <mesh name>=0.2 \
+  --sort height --weight <mesh>=0.2 \
   ../../assets/3d/source/<first-shape>.glb ../../assets/3d/source/<second-shape>.glb ../../assets/3d/source/<third-shape>.glb
 ```
 
 - `--sort` is shared by every shape of the stage: `height` by default; `radius` (distance from the centre) as soon as one shape is flat along the vertical axis, where heights tie; `angle` (around the vertical axis) for rings and wheels.
-- `--weight <mesh name>=<factor>` multiplies the area of the named mesh (the glTF node name): below 1 for a slab or a backdrop that would swallow the points, above 1 for a small part the story is about. Repeat it per mesh.
+- `--weight <mesh>=<factor>` multiplies the area of the named mesh (the glTF node name): below 1 for a slab or a backdrop that would swallow the points, above 1 for a small part the story is about. Repeat it per mesh.
 - Sampling is random: after a re-run, re-capture the poster (`shader-craft` §7).
 
 ```ts

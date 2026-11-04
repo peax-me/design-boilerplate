@@ -44,7 +44,7 @@ The contract of `shader-craft` §2 applies: an effect component `packages/ui/src
 | Tests                      | `packages/ui/tests/<effect>-morph.test.tsx`, written first (§10)                                             |
 | URLs passed to the scene   | Built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`: `shapes={{ light: [...], full: [...] }}`          |
 
-Start from `references/particle-scene.md`: the four modules and the morph test, verified against this repo's typecheck, lint and format and run in a browser. The scene is split in four because the lint caps a file at 250 lines and 10 imports, and a function at 60 lines. `GPUComputationRenderer`, `MeshSurfaceSampler` and `GLTFLoader` ship with `three` (`three/addons/...`): nothing to install.
+Start from `references/particle-scene.md`: the four modules and the morph test, verified against this repo's typecheck, lint and format and run in a browser. The scene is split in four because the lint caps a file at 250 lines and 10 imports, and a function at 60 lines. `GPUComputationRenderer`, `MeshSurfaceSampler` and `GLTFLoader` ship with `three` (`three/addons/...`): nothing to install. The layers, the simulation and the points are made in the effect that disposes them (`useSceneResource`, `shader-craft` §3): created during render, StrictMode's first cleanup would dispose the simulation in development and the particles would restart from the origin.
 
 ## 3. Prepare the shapes
 
@@ -67,8 +67,9 @@ Shapes are sampled offline, never in the browser: sampling 131,072 points blocks
 **Run the sampling script** (`references/sample-shapes.md`) on the sources of one stage together:
 
 ```bash
+mkdir -p apps/web/public/media/<feature>
 pnpm --filter @repo/ui exec node scripts/sample-shapes.ts --out ../../apps/web/public/media/<feature> \
-  --sort height --weight <mesh name>=0.2 \
+  --sort height --weight <mesh>=0.2 \
   ../../assets/3d/source/<first-shape>.glb ../../assets/3d/source/<second-shape>.glb ../../assets/3d/source/<third-shape>.glb
 ```
 
@@ -98,7 +99,7 @@ Budget: shape data stays inside the scroll-footage envelope, 6 MB on `full` and 
 - Between two shapes, each particle leaves on its own, delayed by its seed (`STAGGER`), and the delay is local to that segment.
 - So at progress `k / (SHAPES − 1)` (0, 0.5 and 1 for three shapes) every particle sits exactly on shape `k`, and every shape can be held and read.
 - A stagger spread over the whole progress range never lets a middle shape form: with three shapes and a stagger of 0.35, particles miss the middle shape by up to 0.4 units at 0.5. The test of §10 holds the rule.
-- Stagger by the seed for a dissolve. For a sweep, replace the seed with the particle's height on the target shape (`goal.y * 0.5 + 0.5`): particles leave from the bottom up. A morph where every particle leaves at once reads as a cut.
+- Particles leave in seed order for a dissolve. Define `SWEEP` for a sweep: `morphGoal` then orders them by their height on the target shape, read from the target layer, and they leave from the bottom up. A morph where every particle leaves at once reads as a cut.
 
 **The forces**, summed in the velocity pass:
 
@@ -199,9 +200,10 @@ Use the canvas-capture recipe of `shader-craft` §7 (the `capture-stage` script)
 
 Write `tests/<effect>-morph.test.tsx` (in `references/particle-scene.md`) before the shaders, in the package's Vitest browser mode:
 
-- **The morph holds every shape**: render `MORPH_GOAL` for every particle into a float target at progress `k / (SHAPES − 1)`, with seeds spanning 0 to 1, and assert the farthest particle is exactly 0 from shape `k`.
+- **The morph holds every shape**: render `MORPH_GOAL` for every particle into a float target at progress `k / (SHAPES − 1)`, with seeds spanning 0 to 1, for both stagger orders, and assert the farthest particle is within 1e-6 of shape `k` (float rounding; measured 0).
 - **The simulation settles**: run `step` with the curl off at a hold position for a few hundred frames and assert every particle ends within 0.001 of the shape.
-- **The scene mounts**: the first frame draws (pixels lit), and a pointer over the centre lowers the lit pixels there.
+- **The scene survives StrictMode**: mounted inside `<StrictMode>`, its first frame draws the first shape (pixels lit), not a dot at the origin.
+- **The pointer parts the cloud**: a mouse over the centre lowers the lit pixels there, and they come back once it leaves.
 - Every new force, stagger key or shape count gets its failing case first. The shader compile and blank-frame checks of `shader-craft` §8 apply to the points material too.
 - The effect component's story renders one variant per hold (progress fixed at 0, 0.5, 1): the design review sees every shape, and a bad sample (a slab that swallows the points, a hollow side) shows before the page exists.
 
@@ -232,6 +234,7 @@ The global budgets apply (`shader-craft` §9; `motion-review` owns the real-GPU 
 | The motion audit says frozen                    | Breathing too faint                                       | More curl at rest, or a slow camera drift                           |
 | Points vanish on a light scheme                 | Additive blending on a light ground                       | Normal blending with an ink token on light grounds                  |
 | A phone shows only the poster                   | The `light` tier waits for a first interaction            | By design: the poster is a complete page                            |
+| A dot at the origin, only in `pnpm dev`         | The simulation made during render, disposed by StrictMode | `useSceneResource`; the StrictMode test of §10                      |
 
 ## 13. Avoid
 
