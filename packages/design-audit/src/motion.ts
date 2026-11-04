@@ -18,7 +18,7 @@ export interface MotionViolation {
 
 const BLANK_DEVIATION = 2;
 const FROZEN_DIFFERENCE = 0.5;
-const AMBIENT_INTERVAL_MS = 500;
+export const AMBIENT_INTERVAL_MS = 500;
 const RENDER_ERROR = /THREE\.WebGLProgram|Shader Error|GL_INVALID|CONTEXT_LOST_WEBGL/u;
 const PAGE_CANVAS = "page";
 

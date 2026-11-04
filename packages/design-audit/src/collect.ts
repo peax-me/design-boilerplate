@@ -93,3 +93,30 @@ export function collectElements(): ElementSnapshot[] {
     };
   });
 }
+
+export async function collectLuminance({
+  png,
+  size,
+}: {
+  png: string;
+  size: number;
+}): Promise<number[]> {
+  const response = await fetch(png);
+  const bitmap = await createImageBitmap(await response.blob(), {
+    resizeWidth: size,
+    resizeHeight: size,
+    resizeQuality: "high",
+  });
+  const context = new OffscreenCanvas(size, size).getContext("2d");
+  if (context === null) {
+    throw new Error("A 2D canvas context is unavailable.");
+  }
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+
+  const { data } = context.getImageData(0, 0, size, size);
+  return Array.from({ length: size * size }, (_, pixel) => {
+    const [red = 0, green = 0, blue = 0] = data.subarray(pixel * 4, pixel * 4 + 3);
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  });
+}
