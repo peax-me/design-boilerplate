@@ -8,7 +8,7 @@ import { render } from "vitest-browser-react";
 import type { Block } from "../src/lib/isometric.ts";
 import { BlockGroup } from "../src/scene/block-group.tsx";
 import { StageCanvas } from "../src/scene/stage-canvas.tsx";
-import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
+import { LIVE_TIMEOUT } from "../stories/support/live-timeout.ts";
 import { pause } from "./support/pause.ts";
 
 const FRAMES_MS = 300;

@@ -3,7 +3,7 @@ import { expect } from "storybook/test";
 
 import { IsoBlocks } from "../src/components/iso-blocks.tsx";
 import { Stage } from "../src/motion/stage.tsx";
-import { LIVE_TIMEOUT } from "../tests/support/live-timeout.ts";
+import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
 import { plainBox, plainScene } from "./support/plain-scene.tsx";
 
 const meta = {

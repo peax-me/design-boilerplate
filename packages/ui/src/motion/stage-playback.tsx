@@ -1,16 +1,11 @@
 "use client";
 
 import { Pause, Play } from "lucide-react";
-import { createContext, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "../components/button.tsx";
 import { Icon } from "../components/icon.tsx";
-
-const PLAYING = { paused: false };
-const PAUSED = { paused: true };
-
-/* Whether the visitor paused the stage: its canvas draws no new frame until played again. */
-export const StagePlaybackContext = createContext(PLAYING);
+import { playbackFor, StagePlaybackContext } from "./stage-playback-context.ts";
 
 interface StagePlaybackProps {
   /* The scene layer: its canvas reads the playback. */
@@ -31,7 +26,7 @@ export function StagePlayback({
   const [paused, setPaused] = useState(false);
 
   return (
-    <StagePlaybackContext value={paused ? PAUSED : PLAYING}>
+    <StagePlaybackContext value={playbackFor(paused)}>
       {children}
       {controllable ? (
         <Button

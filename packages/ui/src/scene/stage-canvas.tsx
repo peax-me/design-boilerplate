@@ -5,7 +5,7 @@ import { gsap } from "gsap";
 import { use, useEffect } from "react";
 
 import { pixelRatio, type QualityTier } from "../lib/quality-tier.ts";
-import { StagePlaybackContext } from "../motion/stage-playback.tsx";
+import { StagePlaybackContext } from "../motion/stage-playback-context.ts";
 
 /* A frame moves a scene by this much at most: a pause (offscreen, paused by the visitor, background tab) is not replayed, and a slow device still moves. */
 const MAX_FRAME_DELTA_SECONDS = 0.1;

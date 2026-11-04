@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 
+import { LIVE_TIMEOUT } from "../stories/support/live-timeout.ts";
 import { afterIdle, BoxStage, stageAt } from "./support/box-stage.tsx";
 import { countedScene } from "./support/counted-scene.tsx";
-import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
 import { pause, SETTLE_MS } from "./support/pause.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 import { DESKTOP } from "./support/viewports.ts";

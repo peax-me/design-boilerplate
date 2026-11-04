@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, type Mock, onTestFinished, vi } from "
 import { render } from "vitest-browser-react";
 
 import type { QualityTier } from "../src/lib/quality-tier.ts";
-import { StagePlaybackContext } from "../src/motion/stage-playback.tsx";
+import { playbackFor, StagePlaybackContext } from "../src/motion/stage-playback-context.ts";
 import { StageCanvas } from "../src/scene/stage-canvas.tsx";
 import { FrameCounter } from "./support/frame-counter.tsx";
 import { pause, SETTLE_MS } from "./support/pause.ts";
@@ -16,13 +16,11 @@ const SAMPLED_FRAMES = 4;
 /* A frame moves a scene by 0.1 s at most; the subtraction behind a delta may round a hair above it. */
 const FRAME_CAP_SECONDS = 0.1;
 const LARGEST_DELTA = FRAME_CAP_SECONDS + 1e-9;
-/* Five frames a second: every gap between two frames is longer than the cap. */
+/* Five frames a second: a gap between two frames is longer than the cap, unless GSAP catches up after a late tick. */
 const SLOW_DEVICE_FPS = 5;
 const GSAP_DEFAULT_FPS = 240;
 const DEVICE_PIXEL_RATIO = 3;
 const STAGE = { width: 240, height: 120 };
-const PLAYING = { paused: false };
-const PAUSED = { paused: true };
 
 interface StageProps {
   tier: QualityTier;
@@ -36,7 +34,7 @@ interface StageProps {
 
 function Stage({ tier, onFrame, spacer, paused = false, width = STAGE.width }: StageProps) {
   return (
-    <StagePlaybackContext value={paused ? PAUSED : PLAYING}>
+    <StagePlaybackContext value={playbackFor(paused)}>
       {spacer === undefined ? null : <div style={{ height: spacer }} />}
       <div style={{ width, height: STAGE.height }}>
         <StageCanvas tier={tier}>
@@ -127,8 +125,9 @@ describe("StageCanvas", () => {
     await expect
       .poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT)
       .toBeGreaterThan(SAMPLED_FRAMES);
+    /* A late tick makes GSAP schedule the next one at once, so a frame may move less than the cap: none stands still, and the cap bites. */
     const deltas = deltasOf(onFrame);
-    expect(Math.min(...deltas)).toBeCloseTo(FRAME_CAP_SECONDS, 6);
+    expect(Math.min(...deltas)).toBeGreaterThan(0);
     expect(Math.max(...deltas)).toBeCloseTo(FRAME_CAP_SECONDS, 6);
   });
 

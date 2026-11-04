@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 
+import { LIVE_TIMEOUT } from "../stories/support/live-timeout.ts";
 import { afterIdle, BoxStage, stageAt } from "./support/box-stage.tsx";
-import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 import { DESKTOP, PHONE } from "./support/viewports.ts";
 

@@ -5,8 +5,8 @@ import { page } from "vitest/browser";
 
 import type { Block } from "../src/lib/isometric.ts";
 import { BlockStage } from "../src/motion/block-stage.tsx";
+import { LIVE_TIMEOUT } from "../stories/support/live-timeout.ts";
 import { afterIdle, stageAt } from "./support/box-stage.tsx";
-import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 import { DESKTOP, PHONE } from "./support/viewports.ts";
 
