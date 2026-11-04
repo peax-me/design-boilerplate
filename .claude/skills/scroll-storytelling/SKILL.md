@@ -73,7 +73,7 @@ Rules:
 - Target elements with `data-scene-item` attributes; selectors are scoped to the scene.
 - Animate `transform` and `opacity` only; the one exception is the short-text blur of §5. Durations, easings and staggers come from `@repo/ui/motion/tokens`; add a token there rather than a magic number.
 - One `ScrollTrigger` per scene (the one `ScrollScene` creates). Nested timelines, not nested triggers.
-- A scene that hosts a WebGL stage (`shader-craft`, `gpu-particles`, `cinematic-footage`, `scene-3d`) tweens a stable `{ value }` progress object that the lazy scene reads every frame, and never targets a uniform or a mesh: they do not exist until the scene mounts, and it may never mount (`shader-craft` §3).
+- A scene that hosts a WebGL stage tweens the page's `{ value }` progress object and never the stage's internals (`shader-craft` §3).
 - A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill.
 
 ## 5. Kinetic type

@@ -7,7 +7,7 @@ description: Source, generate, post-process and ship visual assets (photos, illu
 
 An asset illustrates one beat of the copy; it never replaces copy. Work through four gates: asset list, quote, review, ship.
 
-**Two modes.** In an interactive session the user approves the asset list, the quote and the review, and no credit is spent before the user says yes to a quote. A run started by the `signature-experience` skill from a brief is autonomous (ADR-0028): gates 1 and 3 become self-checks recorded in `DESIGN.md`, and gate 2 becomes a check against the page's cap of 30,000 credits. In both modes each paid call is quoted first, and no call takes the page past the cap.
+**Two modes.** In an interactive session the user approves the asset list, the quote and the review, and no credit is spent before the user says yes to a quote. A run started by the `signature-experience` skill from a brief is autonomous (ADR-0028): gates 1 and 3 become self-checks recorded in `DESIGN.md`, and gate 2 becomes a check against the page's cap: a page total at or under 30,000 credits proceeds, above it stops. In both modes each paid call is quoted first, and no call takes the page above the cap.
 
 ## 0. Before anything
 
@@ -50,15 +50,17 @@ Cheapest and safest first. Record, per slot, why each earlier step failed.
 4. **Magnific stock**: `stock_search` with `license`, `orientation`, `color`, and `ai_generated: excluded` for anything shown as real. `content_type: icon` returns SVG. Similar to an approved image: `imageCreationId`. Edit with `stock_to_creation`.
 5. **Generation**, only for what the steps above cannot cover.
 
+Choose by cost as well, before the plan is quoted: with the page's `spent` and the cap in view (§3), take the cheapest route that still tells the beat (stock before generation, one call with `count` N before several, 2.5D relief or a still before video). The quote gate does not re-plan (§3).
+
 ## 3. Quote and approval (gate 2)
 
 1. `account_balance`, and the page's entry in the ledger (below): what it has `spent` so far.
 2. Read the live catalog: `images_models_list { onlyRecommended: true }`, `video_models_list`, `models3d_models_list`. Choose by `agentRecommendation`; never pick a model or a price from memory.
-3. `simulate_cost` for every planned call with its exact arguments (`{}` lists the arguments). Upscales are priced by source size: quote them separately. A tool that `simulate_cost` does not list, such as `video_finalize_draft`, counts at the price of the equivalent generation at final resolution, an upper bound.
+3. `simulate_cost` for every planned call with its exact arguments (`{}` lists the arguments). Upscales are priced by source size: quote them separately. When `simulate_cost` returns a `range`, count its top. A tool that `simulate_cost` does not list, such as `video_finalize_draft`, counts at the price of the equivalent generation at final resolution, an upper bound.
 4. Show a table: slot, tool, model and settings, count, credits (with `certainty` or `range`), the quote total, then `spent`, the page total (`spent` plus the quote), the cap and the balance after.
 5. **Gate.**
-   - Interactive: wait for an explicit yes. One yes covers every call of the quoted table; quote again if any argument changes or the total grows. A page total above the cap needs the user's explicit decision.
-   - Autonomous: do not wait. While the page total stays at or under the cap of 30,000 credits, go on and record each call in the ledger. If it would pass the cap, stop before the first call and ask: say what the page has spent, what the plan costs, the total and the cap, and propose a way out (a cheaper route for the same beat, one beat fewer, a higher cap). Never trim the quote at the gate to squeeze under the cap (fewer retries, a lower resolution, another model): that changes what the page shows, which is the user's call. Choosing the cheapest route that tells a beat belongs to planning, before the quote (§2).
+   - Interactive: wait for an explicit yes. The user's yes to the quote table is the explicit yes of ADR-0028 for every call listed in it; a call added later, or one whose argument changes or whose total grows, needs a new yes. A page total above the cap needs the user's explicit decision.
+   - Autonomous: do not wait. A page total (`spent` plus the priced plan) at or under 30,000 credits proceeds: record each call in the ledger. Above 30,000 the run stops before the first call and asks, even when a cheaper variant exists. Say what the page has spent, what the plan costs, the total and the cap, and list the options with the cheaper variant first, priced with `simulate_cost` (a cheaper route for the same beat, one beat fewer, a higher cap), so one word answers. Never re-plan or trim the quote at the gate yourself (fewer retries, a lower resolution, another model, shorter shots): that changes what the page shows, which is the user's call. Cost-based choices belong to planning, before the quote (§2).
 6. Before each call, check again: `spent` plus the `simulate_cost` of that call stays at or under the cap. After it, append its ledger entry and say in one line: credits used, page total, balance left.
 
 Routes to validate against the live catalog:
@@ -98,7 +100,7 @@ Routes to validate against the live catalog:
 
 - One object per page, created with `cap: 30000` before its first paid call. The cap covers exploration, drafts and retries.
 - One entry per paid call, discarded takes and drafts included. Free tools (`account_balance`, `simulate_cost`, `video_view_frames`, `video_analyze`, `video_metadata`, `video_extract_frames`) are not entered.
-- `credits` is the `simulate_cost` figure of that call (`basis: "simulate_cost"`). For a tool `simulate_cost` does not list, read `account_balance` right before and right after the call, record the difference as `credits` and both readings as `balance` (`basis: "account_balance"`).
+- `credits` is the `simulate_cost` figure of that call, the top of its `range` when it returns one (`basis: "simulate_cost"`). For a tool `simulate_cost` does not list, read `account_balance` right before and right after the call, record the difference as `credits` and both readings as `balance` (`basis: "account_balance"`).
 - `spent` is the sum of the entries' `credits`, rewritten with every append. When a run resumes, recompute it from the entries instead of trusting it.
 - The `credits` of a shipped file (§7) count what made that file; the ledger counts everything that was spent.
 
@@ -141,12 +143,12 @@ In this order, each step only if needed:
 4. `images_to_svg` for flat art only, then SVGO; keep the `viewBox`, replace fills with `currentColor`. Animate SVG with GSAP in `@repo/ui`, never with `images_animate_svg` output.
 5. Download the original immediately, URLs expire: `creations_register_download { license: true }` for stock and generations.
 6. Raster master: one file per slot, at most twice the largest rendered width (3840 px cap); `next/image` derives AVIF and WebP.
-7. Loop: an H.264 MP4 without audio plus a WebM, and the first frame as the poster. Stay inside the desktop envelope of `cinematic-footage` §3 (6 MB a file): raise `-crf` before lowering the width.
+7. Loop: an H.264 MP4 without audio plus a WebM, and the first frame as the poster. Budget: 6 MB a file on desktop and 3 MB on phones, the envelope of `cinematic-footage` §3. Raise `-crf` before lowering the width. A pair over 3 MB gets a second, narrower pair for phones (`-mobile`, 720 px wide, poster not repeated), which the loop component picks with a `media` condition. How the files load is the component's rule (§7).
 
 ```bash
-master=assets/source/<feature>/<slot>/loop.mp4            # a loop that passed the seam check of cinematic-footage §3
-loop=apps/web/public/media/<feature>/<slot>-<subject>
-width=1280                                                # the slot's rendered width, 1600 at most
+master=assets/source/<feature>/<slot>/<slot>.mp4          # a loop that passed the seam check of cinematic-footage §3
+loop=apps/web/public/media/<feature>/<slot>-<subject>     # <slot>-<subject>-mobile for the phone pair
+width=1280                                                # the slot's rendered width, 1600 at most; 720 for the phone pair
 frame=$(mktemp -d)                                        # the PNG intermediate is never versioned
 ffmpeg -i "$master" -an -vf "scale=$width:-2:flags=lanczos" -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p -movflags +faststart "$loop.mp4"
 ffmpeg -i "$master" -an -vf "scale=$width:-2:flags=lanczos" -c:v libvpx-vp9 -crf 34 -b:v 0 -row-mt 1 "$loop.webm"
@@ -156,20 +158,20 @@ avifenc --speed 6 --qcolor 65 --yuv 420 --depth 8 "$frame/first.png" apps/web/sr
 
 ## 7. Ship
 
-| Asset                                 | Location                                                                                                   |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Page image                            | `apps/web/src/features/<feature>/images/<slot>-<subject>[-<scheme>].<ext>`, imported statically            |
-| Video poster (loop, sequence, canvas) | `apps/web/src/features/<feature>/images/<slot>-poster.avif`, imported statically, never under `public/`   |
-| Video loop                            | `apps/web/public/media/<feature>/<slot>-<subject>.{mp4,webm}`                                              |
-| Frame sequence, scroll clip           | `apps/web/public/media/<feature>/<shot>/` (`cinematic-footage` §3)                                         |
+| Asset                                 | Location                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Page image                            | `apps/web/src/features/<feature>/images/<slot>-<subject>[-<scheme>].<ext>`, imported statically                    |
+| Video poster (loop, sequence, canvas) | `apps/web/src/features/<feature>/images/<slot>-poster.avif`, imported statically, never under `public/`            |
+| Video loop                            | `apps/web/public/media/<feature>/<slot>-<subject>.{mp4,webm}`                                                      |
+| Frame sequence, scroll clip           | `apps/web/public/media/<feature>/<shot>/` (`cinematic-footage` §3)                                                 |
 | 3D model, HDRI, splat                 | `apps/web/public/models/<name>.glb`, `apps/web/public/hdri/<name>.hdr`, `apps/web/public/splats/<name>-<tier>.spz` |
-| Social and app icons                  | `opengraph-image.tsx`, `icon.svg`, `apple-icon.png` in `apps/web/src/app/` (code, tokens, real copy)       |
-| Brand vector, custom icon             | `packages/ui/src/icons/<name>.tsx`                                                                         |
-| Masters, sources, 3D sources          | `assets/source/<feature>/<slot>/`, `assets/3d/source/` (not shipped)                                       |
+| Social and app icons                  | `opengraph-image.tsx`, `icon.svg`, `apple-icon.png` in `apps/web/src/app/` (code, tokens, real copy)               |
+| Brand vector, custom icon             | `packages/ui/src/icons/<name>.tsx`                                                                                 |
+| Masters, sources, 3D sources          | `assets/source/<feature>/<slot>/`, `assets/3d/source/` (not shipped)                                               |
 
 - Kebab-case names, no `final`, `new` or `v2`. Replace an approved asset in a reviewed change, never in place.
-- Pages never render `<img>` or `<video>` themselves: images go through `Media` (`image={<Image src={…} alt="…" sizes="…" />}`, ADR-0022), statically imported from the feature's `images/` folder. The first video loop adds a loop component to `@repo/ui` (`design-system` skill): poster, `muted`, `playsInline`, a pause control, and the poster alone under reduced motion. ADR-0024 covers it, so no project ADR.
-- A loop that only plays is that component, with the files of §6. A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built with `cinematic-footage`: its poster sits at the same path, whatever the kind.
+- Pages never render `<img>` or `<video>` themselves: images go through `Media` (`image={<Image src={…} alt="…" sizes="…" />}`, ADR-0022), statically imported from the feature's `images/` folder. The first video loop adds a loop component to `@repo/ui` (`design-system` skill): poster, `muted`, `playsInline`, a pause control, and the poster alone under reduced motion. ADR-0024 covers it, so no project ADR. The poster paints first as the LCP and the video never competes with it: `preload="none"` below the fold (the component starts it when the loop nears the viewport), `preload="metadata"` above it, never `auto`.
+- A loop that only plays is that component, with the files of §6. A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built with `cinematic-footage`: its poster follows the table above, whatever the kind.
 - LCP image: `loading="eager"` and `fetchPriority="high"` (`priority` is deprecated in Next.js 16).
 
 **Alt text**: decorative images get `alt=""`. Informative ones say, in one sentence, what the image adds in context: no "image of", no keywords, no repeat of the heading. A diagram adds a caption or the data in text. Decorative loops are `aria-hidden`.

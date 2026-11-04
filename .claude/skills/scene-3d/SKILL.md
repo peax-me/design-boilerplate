@@ -11,25 +11,20 @@ description: Build real-time 3D inside the design system. Source or generate a m
 
 `three` and `@react-three/fiber` live in `@repo/ui` (ADR-0025, which supersedes ADR-0019). A 3D scene is the lazy scene of a `Stage` (`packages/ui/src/motion/stage.tsx`): `Stage` takes the `poster` and `renderScene({ tier, onReady })`, and the scene renders a `StageCanvas` and calls `useFirstFrame(onReady)`. Where each file lives, the effect component, the framing and the tests follow `shader-craft` §2, §7 and §8 and its `references/effect-skeleton.md`: a model scene is the same skeleton with a model where it has a full-screen plane. Apps pass data and a choreography, never a canvas.
 
-`Stage` already guarantees the following, so a scene never rebuilds it:
+`Stage` guarantees the loading, the tiers (`light` runs live on phones after a first interaction, `full` after idle), the fallback to the poster, the one clock and the pause control of an `ambient` stage: the contract, the clock rules and the resource lifecycle are in `shader-craft` §2 and §3, and a scene never rebuilds them. A scene reads `tier` and changes cost only (§7). In a 3D scene, flowing water or an idle turntable is what makes the stage `ambient`.
 
-- The poster renders first and is the LCP element. The canvas is client-only and loads after idle, once the stage nears the viewport. Reduced motion, no WebGL2, a lost context or a failing scene bring the poster back alone: a complete page, no `canvas`.
-- Two tiers, chosen once at load. `light` (viewport under 48rem, or a coarse pointer) runs the scene live on phones and tablets, after the first interaction, at pixel ratio `[1, 1.5]`. `full` runs after idle at `[1, 2]`. A scene reads `tier` and changes cost only: if it changes the picture, the `light` first frame stops matching the poster.
-- One clock. `StageCanvas` advances the renderer from `gsap.ticker`, in seconds: every `useFrame` delta is in ]0, 0.1] and the first is 0.1. Accumulate `delta` for anything timed. Never call `advance`, read `state.clock.elapsedTime` or `performance.now()`, or set `frameloop` or `dpr` (`shader-craft` §3).
-- A scene that moves on its own (idle turntable, flowing water, drifting camera) is `ambient`: once live, `Stage` adds a control to pause and play it (WCAG 2.2.2). A scene that moves only with the scroll is not.
+What is specific to 3D:
 
-What a scene creates follows three rules:
-
-- A resource made by hand (`Water`, a render target, a `SplatMesh`, a video) lives in `useSceneResource` (`shader-craft` §3). In development StrictMode mounts, cleans up and mounts again, and a resource built during render and disposed in the cleanup stays disposed while in use. Files load through suspense (`useGLTF`, `useLoader`): they cache by URL, and the stage keeps its poster while they load. Never `useGLTF.preload`: a phone that never interacts must not download the model.
+- A resource made by hand (`Water`, a render target, a `SplatMesh`, a video) lives in `useSceneResource`. Files load through suspense (`useGLTF`, `useLoader`): they cache by URL, and the stage keeps its poster while they load. Never `useGLTF.preload`: a phone that never interacts must not download the model.
 - `@react-three/drei` 10 is allowed by ADR-0024, helpers imported one by one. Install it when a scene uses it, pinned in the pnpm catalog (`shader-craft` §2 gives the commands). Self-host what it fetches: its Draco and KTX2 decoders and the `preset` of `Environment` point to third-party CDNs. Never `ScrollControls`: the document scrolls, with Lenis.
-- Tests first, as `shader-craft` §8: the compile and blank-frame test at both tiers, a StrictMode mount, the layering over the canvas.
+- Tests first, as `shader-craft` §8.
 
 ## 2. Get the model
 
 In this order: an existing model the client owns, a licensed model, generation with the Magnific MCP.
 
 - Magnific: `models3d_text_generate` (text to 3D) or `models3d_generate` (image to 3D), then `models3d_remesh`, `models3d_retexture`, `models3d_rig`, `models3d_animate` as needed. Output is GLB.
-- Each paid call is quoted first and recorded as `asset-production` §3 describes: an interactive session works from the quote the user approved, an autonomous run checks the page's 30,000-credit cap against its ledger. Download the GLB immediately: result URLs expire.
+- Each paid call is quoted first and recorded as `asset-production` §3 describes: an interactive session works from the quote the user approved, an autonomous run proceeds at or under the page's 30,000-credit cap and stops above it. Download the GLB immediately: result URLs expire.
 - Keep sources out of the app: `assets/3d/source/<name>.glb`, with provenance recorded as `asset-production` describes. Poly Haven (CC0) supplies HDRIs and PBR textures: record their URL and licence too.
 - **Blender MCP**, adopted by ADR-0027: server `blender` in `.mcp.json` (`uvx mcp-for-blender@2.2.7`, `DISABLE_TELEMETRY=true`, `BLENDER_MCP_SAFE_MODE=1`). It builds, cleans and lightens a scene, authors clips, renders a still and exports GLB. Safe mode blocks direct file reads and writes, subprocesses and network access, and keeps modelling, materials, rendering, saving and import and export: move files with Blender's import and export operators, not Python I/O. A blocked call means change the method, never the setting. Install the add-on once per machine with `uvx mcp-for-blender@2.2.7 install-addon`, and open Blender before the session. The add-on's local socket has no authentication (ADR-0027): close Blender when the session ends.
 - **Headless Blender** (`blender -b -P`) stays for batch jobs: many models, a repeated cleanup, a bulk export. It has no safe mode, so it runs only scripts kept in the project's `assets/3d/source/scripts/`. Write the script there first; never run one from `/tmp`, inline or downloaded.
@@ -44,7 +39,7 @@ npx @gltf-transform/cli inspect apps/web/public/models/<name>.glb
 ```
 
 - Budget: under 2 MB per model, textures 2048 px at most, one model per scene.
-- Prefer meshopt (decoder bundled with three) over Draco. If Draco or KTX2 is unavoidable, self-host the decoders in `apps/web/public/` and point the loaders at them (`useGLTF` takes the decoder path as its second argument).
+- Prefer meshopt (decoder bundled with three) over Draco. If Draco or KTX2 is unavoidable, self-host the decoders in `apps/web/public/` and point the loaders at them (`useGLTF` takes the Draco decoder path as its second argument; KTX2 needs a `KTX2Loader` with `setTranscoderPath` and `detectSupport`, attached through its `extendLoader` fourth argument).
 - Generate a typed component with `npx gltfjsx apps/web/public/models/<name>.glb --types` into `packages/ui/src/scene/`, next to its scene, then bring it to the repository's rules: kebab-case file, named export, explicit names, no `preload`.
 - Shipped locations follow `asset-production` §7. The app builds each URL with `process.env.NEXT_PUBLIC_BASE_PATH` and passes it to the scene.
 
@@ -65,6 +60,8 @@ npx @gltf-transform/cli inspect apps/web/public/models/<name>.glb
 
 A real object that must keep its colours and light (a product, a sculpture, a place) is a Gaussian splat, not a mesh and not sampled points (`gpu-particles` §8 sends it here). A splat shows one object, cannot be relit and does not morph. A mesh wins when the object needs relighting, clips or physics.
 
+**Before the first splat.** ADR-0027 names Brush, and neither a pose tool nor a compressor. The first splat of a project writes one ADR (`status: proposed`) that settles both, and stops (ADR-0028); until it is accepted, no splat is produced.
+
 1. **Orbit footage.** Generate one continuous full turn around the still object, at constant height and distance, in plain even light, on a plain ground, with no cut and no text. The model, the keyframes (the same image as start and end closes the turn), the drafts, the review and the budget are those of `cinematic-footage` §2. A splat is only as good as the consistency of the object between views: ask `video_analyze` "Does the object keep the same shape, proportions and details from every side?" and reject a clip where it drifts.
 2. **Frames.** Extract evenly spaced frames at the master's resolution, starting near 100 and adjusting to the result. A plain background, transparent frames or a `masks/` folder keep the background out of the splat.
 
@@ -72,9 +69,9 @@ A real object that must keep its colours and light (a product, a sculpture, a pl
 ffmpeg -i assets/source/<feature>/<slot>/orbit.mp4 -vf "fps=<count>/<seconds>" assets/source/<feature>/<slot>/frames/%04d.png
 ```
 
-3. **Poses.** Brush trains from COLMAP or Nerfstudio datasets: it reads no video and estimates no camera poses. Estimate them locally with COLMAP (BSD-3-Clause), then lay the dataset out as Brush expects (`brush --help`). ADR-0027 names Brush and no pose tool: until an accepted ADR names one, the first splat of a project writes that ADR with `status: proposed` and stops (ADR-0028).
+3. **Poses.** Brush trains from COLMAP or Nerfstudio datasets: it reads no video and estimates no camera poses. Estimate them locally with the pose tool the ADR names (COLMAP, BSD-3-Clause, is the usual candidate), then lay the dataset out as Brush expects (`brush --help`).
 4. **Train.** Brush (Apache-2.0, local) writes a `.ply`; `--with-viewer` shows it. Train a second, smaller splat for `light` from the same dataset (see `brush --help` for a cap on the number of splats).
-5. **Compress.** A training `.ply` is far above the budget. Ship `.spz` (Spark's `writeSpz` writes it) within the envelope of `cinematic-footage` §3: 6 MB for `full`, 3 MB for `light`. Keep the dataset and the `.ply` in `assets/source/<feature>/<slot>/`, never shipped.
+5. **Compress.** A training `.ply` is far above the budget: ship `.spz`, or another format Spark reads, within the envelope of `cinematic-footage` §3 (6 MB for `full`, 3 MB for `light`). The route is part of the ADR: Spark's `writeSpz` exports `.spz` from a `PackedSplats` held in memory, through its WASM bridge, and its repository has an `assets:compress` script. Keep the dataset and the `.ply` in `assets/source/<feature>/<slot>/`, never shipped.
 6. **Render with Spark** (`@sparkjsdev/spark` 2.x, MIT, ADR-0024; install it when used, pinned in the catalog). In `useSceneResource`, create a `SparkRenderer({ renderer })` added to the scene and a `SplatMesh({ url, onLoad })`, and call `dispose()` on both in the cleanup.
    - Render the child that calls `useFirstFrame` only after `onLoad` has fired: the stage fades the canvas in as soon as it is told, and an empty canvas over the poster fails the motion audit.
    - Training coordinates are y-down: expect to flip the mesh (Spark's examples use `quaternion.set(1, 0, 0, 0)`) and check the first frame against the poster.
@@ -84,16 +81,15 @@ ffmpeg -i assets/source/<feature>/<slot>/orbit.mp4 -vf "fps=<count>/<seconds>" a
 
 ## 6. Animate with the scroll
 
-One clock for everything: GSAP drives Lenis, ScrollTrigger and, through `StageCanvas`, the renderer.
+The scroll reaches the scene through the page's `{ value }` progress object, with the phases, dead zone and late mounts of `shader-craft` §3. Only what is 3D-specific lives here.
 
-- The page creates a stable `{ value }` progress object, and its `ScrollScene` choreography tweens it (`timeline.to(progress, { value: 1, ease: "none" }, 0)`). The scene copies it every frame and moves the model, the camera and the material uniforms from it. A timeline never targets the model or a uniform: they do not exist until the lazy scene mounts, and it may never mount (`shader-craft` §3).
-- Phases of the story are overlapping `smoothstep` windows over the progress, and they start after a dead zone, so a scene that mounts mid-scroll on a phone crossfades from the poster without a jump.
+- The scene moves the model, the camera and the material uniforms from the progress; a splat's camera moves along the captured orbit (§5).
 - Clips from the model (`useAnimations`) are scrubbed by setting the action time from the progress, not played freely. A clip that plays freely makes the stage `ambient`.
 - Durations and easings come from `@repo/ui/motion/tokens`.
 
 ## 7. Poster, budget and accessibility
 
-- The poster is the scene's first frame, captured, never drawn or rendered elsewhere. `shader-craft` §7 owns the recipe: a deterministic first frame, one poster for both tiers, the `capture-stage` script with Playwright, `avifenc` to AVIF, the still plates for `ScrollScene still`. For a model scene the first frame means the model at its progress-0 pose, the camera at its start, water at its first `delta`, the environment loaded, no `Math.random()`. Re-capture after any change of model, HDRI, light or camera.
+- The poster is the scene's first frame, captured with the recipe of `shader-craft` §7 (and its `capture-stage` script), never drawn or rendered elsewhere. For a model scene the first frame means the model at its progress-0 pose, the camera at its start, water at its first `delta`, the environment loaded, no `Math.random()`. Re-capture after any change of model, HDRI, light or camera.
 - Cost knobs per tier, on top of `shader-craft` §9 (the pixel ratio comes from the tier):
 
 | Knob                    | `light`                                       | `full`       |

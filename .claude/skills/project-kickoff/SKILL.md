@@ -17,7 +17,7 @@ The method every project follows. Each phase ends with a gate: show the result, 
 ## Phase 2 — Visual direction
 
 1. Run `design-inspiration`: a reference board, then two or three directions built on `impeccable` (new-work / shape): point of view, type pairing, colour intent, motion personality. Mood frames go through the quote gate of `asset-production`.
-2. Write the result to `DESIGN.md` as **direction only**: point of view, references, do and don't. Token values never go in `DESIGN.md`; they live in `packages/ui/src/styles/theme.css`, the single source of truth (ADR 0008). If a skill asks to write values into `DESIGN.md`, write the reference to `theme.css` instead.
+2. Write the result to `DESIGN.md` as **direction only**: point of view, references, do and don't. Token values never go in `DESIGN.md`; they live in `packages/ui/src/styles/theme.css`, the single source of truth (ADR 0008). If a skill asks to write values into `DESIGN.md`, write the reference to `theme.css` instead. An autonomous run (ADR-0028) also logs, in `DESIGN.md`, its reasons and plans: `## Decisions`, and per page `## Page: <name>` with `### Storyboard` and `### Assets`. Those sections hold choices and plans, never token values.
 
 **Gate:** the user approves the direction (show two or three options when the brief is open).
 

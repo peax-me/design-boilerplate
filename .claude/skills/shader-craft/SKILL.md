@@ -301,7 +301,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 
 ## 7. Poster: capture the first frame
 
-The poster is the LCP image and the whole page under reduced motion or without WebGL2. It must be the scene's first frame, or the crossfade pops. This is the one canvas-capture recipe: `gpu-particles` and `scene-3d` use it, `cinematic-footage` owns video posters.
+The poster is the LCP image and the whole page under reduced motion or without WebGL2. It must be the scene's first frame, or the crossfade pops. This is the one canvas-capture recipe: `gpu-particles` and `scene-3d` use it, `cinematic-footage` takes the poster of a frame sequence from its first frame, and `asset-production` §7 gives every video poster its location.
 
 1. Make the scene deterministic (§3): first frame at `uTime = 0.1`, pointer at rest, progress at its start, no `Math.random()`.
 2. **One poster for both tiers.** Tier knobs change only cost: pixel ratio, raymarch steps, half-resolution passes, a particle count drawn from the same sampled set. Never image-shaping parameters (octaves, warp levels, dispersion and ray samples, palette, point layout): those would make the `light` first frame differ from a poster captured at `full`. If a difference is unavoidable (half-resolution bloom on `light` is the usual one), compare the two first frames side by side; if they differ visibly, capture a `light` poster too and serve it from the effect component by the same media conditions as the tier (narrow viewport or coarse pointer).

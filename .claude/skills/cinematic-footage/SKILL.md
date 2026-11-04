@@ -24,7 +24,7 @@ Footage earns its place when the story needs a real place or a real object in th
 | An atmosphere behind copy                         | A seamless loop: a plain video loop component, or an ambient stage when it needs WebGL    |
 | A still that should breathe                       | 2.5D relief from a depth map (§6), no video at all                                        |
 
-**Two routes for a loop.** A loop that only plays is a plain video: the loop component of `asset-production` (MP4 and WebM, its poster, `muted`, `playsInline`, its own pause control, the poster alone under reduced motion) owns it, and this skill only generates and encodes it (§2, §3). A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built here, with frames drawn as textures and `Stage`'s pause control.
+**Two routes for a loop.** A loop that only plays is a plain video: the loop component of `asset-production` (MP4 and WebM, its poster, `muted`, `playsInline`, its own pause control, the poster alone under reduced motion) owns it. This skill only generates it (§2); `asset-production` §6 encodes it with its poster and §7 ships it. A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built here, with frames drawn as textures and `Stage`'s pause control.
 
 Avoid footage for anything a visitor must read or trust as real evidence: product UI comes from real screenshots, people presented as customers are never generated (`asset-production`).
 
@@ -79,10 +79,11 @@ A draft's last frame is softer than the final's: chaining from a draft starts th
 
 **Budget.** 30,000 credits per page, exploration, drafts and retries included; Magnific is the only paid provider.
 
-- Price the whole plan before the first call: `simulate_cost` with the exact arguments of every keyframe, draft and final, plus one retry per final shot. `video_finalize_draft` is not in `simulate_cost`: count it at the price of the equivalent `video_generate` at final resolution, an upper bound. If the plan does not fit, shorten shots, use fewer shots, or carry a beat with 2.5D relief (§6) instead of video.
+- Plan within the cap before the first quote: with the cap and the page's `spent` in view, choose the number and length of shots, or carry a beat with 2.5D relief (§6) instead of video. Once a priced plan would pass the cap, do not re-plan on your own: an autonomous run stops and asks (`asset-production` §3), with the cheaper variant as an option in the question.
+- Price the whole plan before the first call: `simulate_cost` with the exact arguments of every keyframe, draft and final, plus one retry per final shot, a ranged quote counting at its top (`asset-production` §3). `video_finalize_draft` is not in `simulate_cost`: count it at the price of the equivalent `video_generate` at final resolution, an upper bound.
 - `simulate_cost` again before each paid call (arguments drift). `account_balance` keeps no history: read it right before and right after `video_finalize_draft`, and record the difference as its real cost.
 - Record every paid call and its credits in `assets/provenance.json` with the page's running total (`asset-production` owns the format).
-- Approval follows `asset-production`: an interactive session works from the quote the user approved; an autonomous run proceeds while the page stays under 30,000 credits and stops before a call that would pass it (ADR-0028).
+- Approval follows `asset-production`: an interactive session works from the quote the user approved; an autonomous run proceeds while the page total is at or under 30,000 credits and stops above it (ADR-0028).
 - Download every result at once (`creations_register_download`, then save): result URLs expire.
 
 ## 3. Encode
@@ -125,7 +126,7 @@ cat "$out"/*.avif | wc -c; cat "$out"/portrait/*.avif | wc -c   # sum every shot
 
 `fps` keeps the last source frame of each output slot: with its default rounding, the sequence would start one or two frames late, and the poster and the seams would be off. `round=up` and that step put the first and the last source frames in the sequence (checked on four clips, trimmed or not: SSIM 1.000 at both ends). The portrait set weighs about half the landscape one: 150 frames of clean graphic test footage at `--qcolor 50` weighed 1.5 MB at 675×900 against 3.3 MB at 1600×900. Over budget: lower `--qcolor` by 5 and encode again (each step took about 15 % off: 1.25 MB at 45, 1.03 MB at 40 for that portrait set); at 35 and still over, use fewer frames rather than lower quality. Keep `$frames` until the poster and the still plates are encoded.
 
-**Poster.** This skill owns video posters. The poster is frame 0001 of the first shot, encoded once at `--qcolor 65` (it is the LCP and stays on screen the longest) and stored only as `apps/web/src/features/<feature>/images/<slot>-poster.avif`:
+**Poster.** The poster of a sequence is frame 0001 of the first shot, encoded once at `--qcolor 65` (it is the LCP and stays on screen the longest), at the location `asset-production` §7 gives to every video poster:
 
 ```bash
 avifenc --speed 6 --qcolor 65 --yuv 420 --depth 8 "$frames/landscape/0001.png" apps/web/src/features/<feature>/images/<slot>-poster.avif
