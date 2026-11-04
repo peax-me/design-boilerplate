@@ -24,7 +24,7 @@ Footage earns its place when the story needs a real place or a real object in th
 | An atmosphere behind copy                         | A seamless loop: a plain video loop component, or an ambient stage when it needs WebGL    |
 | A still that should breathe                       | 2.5D relief from a depth map (§6), no video at all                                        |
 
-**Two routes for a loop.** A loop that only plays is a plain video: the loop component of `asset-production` (MP4 and WebM, its poster, `muted`, `playsInline`, its own pause control, the poster alone under reduced motion) owns it, and this skill only generates and encodes it (§2, §3). A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built here, with frames drawn as textures and `Stage`'s pause control. `asset-production` owns plain loops.
+**Two routes for a loop.** A loop that only plays is a plain video: the loop component of `asset-production` (MP4 and WebM, its poster, `muted`, `playsInline`, its own pause control, the poster alone under reduced motion) owns it, and this skill only generates and encodes it (§2, §3). A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built here, with frames drawn as textures and `Stage`'s pause control.
 
 Avoid footage for anything a visitor must read or trust as real evidence: product UI comes from real screenshots, people presented as customers are never generated (`asset-production`).
 
@@ -40,7 +40,7 @@ Work in this order: shot list, keyframes, drafts, review, finalize, review, chai
 - Among the models that qualify, prefer `agentRecommendation.tier: "sota"`, then the lowest `rank`; copy the `slug` verbatim. Never pick a model, a resolution or a price from memory: the catalog and `simulate_cost` change.
 - Prefer a model whose `resolutions` list `Draft`: a draft at that resolution can be finalized into the same shot (below).
 
-**Keyframes.** Design the boundary frames as stills first, they are cheap and fix the look: `images_models_list { onlyRecommended: true }`, then `images_generate` at the shot's aspect ratio, prompt assembled as in `asset-production` §4. The first keyframe of the first shot becomes the look of the poster. Compose every keyframe with the subject inside the central 9:16 band, because phones see a centred portrait crop of the same frames (§3). The first approved keyframe is the style reference of the others.
+**Keyframes.** Design the boundary frames as stills first, they are cheap and fix the look: `images_models_list { onlyRecommended: true }`, then `images_generate` at the shot's aspect ratio, prompt assembled as in `asset-production` §4. The first keyframe of the first shot becomes the look of the poster. Compose every keyframe with the subject inside the central 3:4 band, because phones see a centred 3:4 crop of the same frames (§3). The first approved keyframe is the style reference of the others.
 
 **Prompt** each shot from the shot list, in plain sentences: the camera move with its speed, the subject, the light and its direction, the lens, the medium (water, cloud, dust), then the constraints. Set `cameraMotion` when the model lists it, `promptMode: "manual"` where the model offers it, no `multi_prompt` (one shot, no cuts), and leave sound off (`withSoundEffects` unset or false): the footage is silent.
 
@@ -89,12 +89,12 @@ A draft's last frame is softer than the final's: chaining from a draft starts th
 
 Check the tools first: `avifenc --version` (and `cwebp -version`, `ffmpeg -version`); if missing, `brew install libavif webp ffmpeg`.
 
-| Budget per stage, all shots included | Default                                                            |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| Frames                               | ≤ 150 AVIF frames; beyond, all-intra H.264                         |
-| Desktop                              | 1600 px wide, ≤ 6 MB, whatever the format                          |
-| Mobile                               | centred portrait crop at the full 900 px height (506×900), ≤ 3 MB |
-| Loop seam, chained seam              | SSIM ≥ 0.95                                                        |
+| Budget per stage, all shots included | Default                                                                |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| Frames                               | ≤ 150 AVIF frames; beyond, all-intra H.264                             |
+| Desktop                              | 1600 px wide, ≤ 6 MB, whatever the format                              |
+| Mobile                               | centred 3:4 portrait crop at the full 900 px height (675×900), ≤ 3 MB |
+| Loop seam, chained seam              | SSIM ≥ 0.95                                                            |
 
 Each shot is its own slot: its frames go to `apps/web/public/media/<feature>/<shot>/NNNN.avif` and `…/<shot>/portrait/NNNN.avif`, so shots never overwrite each other. Several shots in one stage share the 150 frames and the budgets: run the block once per shot with its share of `count`.
 
@@ -113,7 +113,7 @@ step=$(awk -v n="$count" -v d="$duration" -v r="$rate" -v s="$skip" 'BEGIN { spl
 sample="trim=start_frame=${skip},setpts=PTS-STARTPTS,fps=${step}:round=up"
 mkdir -p "$frames/landscape" "$frames/portrait" "$out/portrait"
 ffmpeg -i "$master" -an -vf "$sample,scale=1600:-2:flags=lanczos" -frames:v $count "$frames/landscape/%04d.png"
-ffmpeg -i "$master" -an -vf "$sample,scale=-2:900:flags=lanczos,crop=506:900" -frames:v $count "$frames/portrait/%04d.png"
+ffmpeg -i "$master" -an -vf "$sample,scale=-2:900:flags=lanczos,crop=675:900" -frames:v $count "$frames/portrait/%04d.png"
 for frame in "$frames"/landscape/*.png; do
   avifenc --speed 6 --qcolor 50 --yuv 420 --depth 8 "$frame" "$out/$(basename "${frame%.png}").avif"
 done
@@ -123,7 +123,7 @@ done
 cat "$out"/*.avif | wc -c; cat "$out"/portrait/*.avif | wc -c   # sum every shot of the stage against 6 MB and 3 MB
 ```
 
-`fps` keeps the last source frame of each output slot: with its default rounding, the sequence would start one or two frames late, and the poster and the seams would be off. `round=up` and that step put the first and the last source frames in the sequence (checked on four clips, trimmed or not: SSIM 1.000 at both ends). Over budget: lower `--qcolor` by 5 and encode again; at 35 and still over, use fewer frames rather than lower quality. Keep `$frames` until the poster and the still plates are encoded.
+`fps` keeps the last source frame of each output slot: with its default rounding, the sequence would start one or two frames late, and the poster and the seams would be off. `round=up` and that step put the first and the last source frames in the sequence (checked on four clips, trimmed or not: SSIM 1.000 at both ends). The portrait set weighs about half the landscape one: 150 frames of clean graphic test footage at `--qcolor 50` weighed 1.5 MB at 675×900 against 3.3 MB at 1600×900. Over budget: lower `--qcolor` by 5 and encode again (each step took about 15 % off: 1.25 MB at 45, 1.03 MB at 40 for that portrait set); at 35 and still over, use fewer frames rather than lower quality. Keep `$frames` until the poster and the still plates are encoded.
 
 **Poster.** This skill owns video posters. The poster is frame 0001 of the first shot, encoded once at `--qcolor 65` (it is the LCP and stays on screen the longest) and stored only as `apps/web/src/features/<feature>/images/<slot>-poster.avif`:
 
@@ -133,7 +133,7 @@ rm -f "$out/0001.avif"                                 # the scene loads frame 1
 avifenc --speed 6 --qcolor 65 --yuv 420 --depth 8 "$frames/portrait/0001.png" "$out/portrait/0001.avif"
 ```
 
-The app imports it statically, passes it as the stage's `poster` (`fill`, `loading="eager"`, `fetchPriority="high"`), and puts `poster.src` first in the landscape frame list: the desktop scene loads frame 1 from the poster's own URL, one download for both. Because the portrait frames are a centred crop at the same height, the same poster, framed with `object-fit: cover`, matches the portrait first frame too, in the boxes that use those frames (§4). The static export serves images unoptimised, so the poster is AVIF itself.
+The app imports it statically, passes it as the stage's `poster` (`fill`, `loading="eager"`, `fetchPriority="high"`), and puts `poster.src` first in the landscape frame list: the desktop scene loads frame 1 from the poster's own URL, one download for both. Because the portrait frames are a centred 3:4 crop at the same height, the same poster, framed with `object-fit: cover`, matches the portrait first frame in every box that uses those frames (§4). The static export serves images unoptimised, so the poster is AVIF itself.
 
 **Still plates** for reduced motion: one per beat, from the frame that tells it (a hold, an arrival), and always the destination, the last frame of the last shot, so the journey reads to its end without motion. Encode them from the kept PNGs like the poster (`--qcolor 65`) into `apps/web/src/features/<feature>/images/<slot>-still-<beat>.avif`, and pass them to `ScrollScene still`.
 
@@ -178,10 +178,10 @@ Measured on test clips: a chained seam of 0.929 between two 1080p shots rose to 
 - Frames load only inside the lazy scene, after the stage's own trigger: a phone that never interacts never downloads them, and Lighthouse measures the poster.
 - The first frame is loaded by the scene through Suspense before it draws, so the first drawn frame is the poster's frame.
 - **One queue per stage**, at most six requests in flight, `priority: "low"`: every shot's coarse frames first (every 8th and each shot's last, so the whole scrub works early), then the missing frame closest to the playhead, picked again at each request so the order follows the visitor. A missing frame shows its nearest loaded neighbour in the same shot.
-- **One decoded-frame cap per stage**: keep frames compressed in memory and decode them on demand with `createImageBitmap` (off the main thread); about eight decoded frames stay, the farthest from the playhead closing first. A decoded 1600×900 frame weighs 5.8 MB.
+- **One decoded-frame cap per stage**: keep frames compressed in memory and decode them on demand with `createImageBitmap` (off the main thread); about eight decoded frames stay, the farthest from the playhead closing first. A decoded 1600×900 frame weighs 5.8 MB, a 675×900 one 2.4 MB.
 - **The next shot is prepared**: from the middle of a shot, the next shot's first frame is decoded and uploaded to the second texture, and the dissolve waits at 0 until it is there: never black, never a stale frame.
-- **The crop follows the stage's box** when the scene mounts, not the window or the quality tier: the portrait frames only when the box is at most 506/900 as wide as it is tall, where their crop is exactly the poster's cover crop. A tablet held upright (0.75) or a 4:5 stage would zoom the portrait crop 1.33 times and upscale it, so those boxes use the landscape frames, cropped like the poster.
-- **A frame that fails is dropped for good**: a non-OK response is never stored and a blob that does not decode is discarded, so neither is asked or decoded again, and the nearest neighbour in the shot stands in.
+- **The crop follows the stage's box** when the scene mounts, not the window or the quality tier: the portrait frames when the box is at most 3:4 (`PORTRAIT_ASPECT = 675 / 900`), which takes in every phone, with or without its toolbar, and a tablet held upright. In those boxes the portrait frames crop exactly like the poster's cover crop (checked in the browser at 0.56, 0.60, 0.67 and 0.75: within 1 level). Wider boxes, 4:5 and beyond, use the landscape frames, cropped like the poster.
+- **A frame that fails is dropped for good**: a non-OK response or a network error is never stored and a blob that does not decode is discarded, so neither is asked or decoded again; the worker that asked moves on to the next frame, and the nearest neighbour in the shot stands in.
 - **Every resource lives in the effect that disposes it** (`useSceneResource`, `shader-craft` §3): the store, its textures and the clip. Created during render, StrictMode's first cleanup would abort the store or close the clip in development, and the scene would stay on one frame or black.
 - URLs are built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`.
 
@@ -199,7 +199,7 @@ Start from `references/footage-scene.md`: the frame store, the dissolve shader, 
 **Tests first**, in the package's Vitest browser mode, before the scene:
 
 - `place`: the dead zone holds the first frame, the end of each shot but the last dissolves, progress 1 is the last frame of the last shot.
-- The store: at most six requests in flight, coarse frames first, decoded bitmaps capped (count `createImageBitmap` and `close` calls); a 404 asked once, a broken frame decoded once, a neighbour shown instead of black.
+- The store: at most six requests in flight, coarse frames first, decoded bitmaps capped (count `createImageBitmap` and `close` calls); a 404 asked once, a broken frame decoded once, the nearest good frame on screen (read from the picture); with network errors on several frames, the rest of the stage still loads.
 - The mounted scene, inside `<StrictMode>` and with network latency: frames keep loading to the last shot. With decoding slowed, a jump into a dissolve shows no black pixel and none of the next shot until its first frame is on the texture.
 - The clip, inside `<StrictMode>`: its first frame draws and a seek changes the picture (`references/footage-scene.md` has these tests).
 - The dissolve shader: the compile and blank-frame test of `shader-craft` §8.
@@ -256,7 +256,7 @@ Every Magnific step here is paid: quote it like any other call (§2).
 - More than 150 frames as AVIF, or a stage over 6 MB on desktop or 3 MB on phones, in any format.
 - Several shots in one folder; the poster stored twice.
 - Decoding every frame up front, one queue per shot, or decoding on the main thread with `<img>` uploads.
-- Retrying a frame that failed, or a store or clip created during render (StrictMode closes it in development).
+- Retrying a frame that failed, a loader that stops at a network error, or a store or clip created during render (StrictMode closes it in development).
 - A first drawn frame that is not the poster, or a dissolve into a shot whose frame is not there yet.
 - 2.5D shifts beyond 3 % of the width, or a background plate without its subject removed.
 

@@ -7,7 +7,9 @@ The modules and tests of a scroll-driven footage stage, checked as written in th
 - Decoded bitmaps stay at 8 for the stage (9 alive counting the first frame's), across a walk through all three shots.
 - With decoding slowed to 1.5 s, a jump straight into a dissolve showed no pixel of the next shot and no black pixel until its first frame was on the texture; then the dissolve ran.
 - Under StrictMode with 300 ms of network latency, frames keep loading to the last shot. With the store created during render and aborted by the first cleanup, the same test fails: no frame after the first ever arrives.
-- A frame answered with a 404 is asked once, a frame that does not decode is decoded once, and the picture shows a neighbour, never black. Before the fix, the missing frame was asked twice and the broken one decoded again on every frame.
+- A frame answered with a 404 is asked once, a frame that does not decode is decoded once, and the picture shows the nearest good frame, read from its grey level (each test frame has its own). Before the fix, the missing frame was asked twice and the broken one decoded again on every frame.
+- With six frames failing at the network (a rejected `fetch`), the rest of the stage still loads and the picture reaches frame 9. Before the fix, each rejection ended a worker: the six were gone and the picture stayed on frame 8, the last coarse frame loaded.
+- The scene picks the portrait frames in boxes of 0.56, 0.60, 0.67 and 0.75, the landscape ones at 0.80, and in every one its first drawn frame matches the poster's cover crop within 1 level.
 - `place` holds the first frame through the dead zone (the first tenth of the scroll) and ends on the last frame of the last shot.
 - The clip, under StrictMode, draws its first frame at once, scrubs, and is opened again by the second mount instead of staying closed.
 
@@ -117,6 +119,23 @@ function nextToLoad(store: FrameStore): number | undefined {
   return best;
 }
 
+/* A frame that fails (a non-OK answer, a network error) stays requested and missing: it is never fetched again,
+   its neighbours stand in, and the worker moves on to the next frame. */
+async function loadFrame(store: FrameStore, index: number): Promise<void> {
+  try {
+    const response = await fetch(store.urls[index] ?? "", {
+      signal: store.loading.signal,
+      priority: "low",
+    });
+    if (response.ok) {
+      const { blobs } = store;
+      blobs[index] = await response.blob();
+    }
+  } catch {
+    /* A network error, or the store closing: nothing to keep for this frame. */
+  }
+}
+
 export function createFrameStore(shots: string[][]): FrameStore {
   const starts = shots.map((_, shot) =>
     shots.slice(0, shot).reduce((sum, urls) => sum + urls.length, 0),
@@ -134,22 +153,18 @@ export function createFrameStore(shots: string[][]): FrameStore {
     loading: new AbortController(),
   };
   async function work(): Promise<void> {
-    for (let index = nextToLoad(store); index !== undefined; index = nextToLoad(store)) {
+    for (
+      let index = nextToLoad(store);
+      index !== undefined && !store.loading.signal.aborted;
+      index = nextToLoad(store)
+    ) {
       store.requested.add(index);
-      // oxlint-disable-next-line no-await-in-loop -- each worker fetches one frame at a time, the closest still missing.
-      const response = await fetch(store.urls[index] ?? "", {
-        signal: store.loading.signal,
-        priority: "low",
-      });
-      /* A frame that fails stays requested and missing: never fetched again, its neighbours stand in. */
-      if (response.ok) {
-        // oxlint-disable-next-line no-await-in-loop -- same worker: the body is read before the next pick.
-        store.blobs[index] = await response.blob();
-      }
+      // oxlint-disable-next-line no-await-in-loop -- each worker loads one frame at a time, the closest still missing.
+      await loadFrame(store, index);
     }
   }
-  /* Aborted on unmount; a frame that fails stays missing and its neighbours stand in. */
-  Promise.all(Array.from({ length: LOAD_CONCURRENCY }, work)).catch(() => null);
+  /* Six workers share one queue; none of them ever rejects, and all stop once the store closes. */
+  void Promise.all(Array.from({ length: LOAD_CONCURRENCY }, work));
   return store;
 }
 
@@ -321,9 +336,10 @@ import { useSceneResource } from "./use-scene-resource.ts";
 
 /* From this far into a shot, the next shot's first frame is decoded and waiting on the second texture. */
 const PREPARE_NEXT_FROM = 0.5;
-/* The portrait frames (a 506×900 crop) match the poster's cover crop only in boxes at most this wide for their
-   height: wider boxes (a tablet held upright, a 4:5 stage) use the landscape frames, cropped like the poster. */
-const PORTRAIT_ASPECT = 506 / 900;
+/* The portrait frames are a centred 3:4 crop (675×900). Any box at most 3:4 (every phone, with or without its
+   toolbar, and a tablet held upright) covers them the way the poster's cover crop covers the landscape frame, so
+   they match it; wider boxes use the landscape frames. */
+const PORTRAIT_ASPECT = 675 / 900;
 
 type Orientation = "landscape" | "portrait";
 
@@ -566,7 +582,6 @@ async function shotUrls(paint: "red-over-blue" | "green" | "grey"): Promise<stri
     grey: ["#ccc", "#ccc"],
   };
   const [top = "", bottom = ""] = colours[paint];
-  context?.fillRect(0, 0, 0, 0);
   if (context !== null) {
     context.fillStyle = top;
     context.fillRect(0, 0, 320, 90);
@@ -575,6 +590,37 @@ async function shotUrls(paint: "red-over-blue" | "green" | "grey"): Promise<stri
   }
   const url = URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
   return Array.from({ length: FRAMES }, () => url);
+}
+
+/* A shot whose frame k is a flat grey of level gradeOf(k): the picture tells which frame is on screen. */
+function gradeOf(frame: number): number {
+  return 20 + frame * 18;
+}
+
+function gradedShot(): Promise<string[]> {
+  const canvas = new OffscreenCanvas(32, 18);
+  const context = canvas.getContext("2d");
+  return Promise.all(
+    Array.from({ length: FRAMES }, async (_, frame) => {
+      const grade = gradeOf(frame);
+      if (context !== null) {
+        context.fillStyle = `rgb(${grade} ${grade} ${grade})`;
+        context.fillRect(0, 0, 32, 18);
+      }
+      return URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
+    }),
+  );
+}
+
+/* The progress at which the playhead of a one-shot stage stands on that frame, past the dead zone. */
+function progressAt(frame: number): number {
+  return 0.1 + (0.9 * frame) / (FRAMES - 1);
+}
+
+/* The grey level at the centre of the canvas. */
+async function gradeOnScreen(canvas: HTMLCanvasElement): Promise<number> {
+  const pixels = await canvasPixels(canvas);
+  return pixels[(18 * 64 + 32) * 4] ?? 0;
 }
 
 function slowFetch(): void {
@@ -594,16 +640,22 @@ function urlOf(input: RequestInfo | URL): string {
   return input instanceof URL ? input.href : input.url;
 }
 
-/* Answers 404 for one URL and lets every other request through; returns the spy, to count requests. */
-function missingFrame(url: string) {
+/* Answers 404 for one URL, fails the network for others, lets every other request through; the spy counts requests. */
+function failingNetwork({ missing, unreachable }: { missing: string; unreachable: string[] }) {
   const network = window.fetch.bind(window);
-  return vi
-    .spyOn(window, "fetch")
-    .mockImplementation((input, init) =>
-      urlOf(input) === url
-        ? Promise.resolve(new Response(null, { status: 404 }))
-        : network(input, init),
-    );
+  return vi.spyOn(window, "fetch").mockImplementation((input, init) => {
+    if (urlOf(input) === missing) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (unreachable.includes(urlOf(input))) {
+      return Promise.reject(new TypeError("Failed to fetch"));
+    }
+    return network(input, init);
+  });
+}
+
+function requestsFor(fetches: ReturnType<typeof failingNetwork>, url: string): number {
+  return fetches.mock.calls.filter(([input]) => urlOf(input) === url).length;
 }
 
 /* Watches every decode, letting it through; decodesOf counts those of one blob, told apart by its size. */
@@ -688,12 +740,12 @@ describe("footage scene under StrictMode", () => {
       .toBeGreaterThan(2000);
   });
 
-  it("asks once for a frame that fails, decodes a broken one once, and shows a neighbour, never black", async () => {
-    const shot = await shotUrls("red-over-blue");
+  it("asks once for a missing frame, decodes a broken one once, and shows the nearest good frame", async () => {
+    const shot = await gradedShot();
     const missing = `${shot.join("")}#missing`;
     const brokenBytes = "not an image";
     const broken = URL.createObjectURL(new Blob([brokenBytes]));
-    const fetches = missingFrame(missing);
+    const fetches = failingNetwork({ missing, unreachable: [] });
     const decodes = watchDecodes();
     const progress = { value: 0 };
     const canvas = await mountFootage(
@@ -701,15 +753,29 @@ describe("footage scene under StrictMode", () => {
       progress,
     );
 
-    progress.value = 0.55;
-    const pixels = await canvasPixels(canvas);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 500);
-    });
+    progress.value = progressAt(5);
+    await expect.poll(() => gradeOnScreen(canvas), { timeout: 5000 }).toBeCloseTo(gradeOf(4), -1);
+    progress.value = progressAt(6);
+    await expect.poll(() => gradeOnScreen(canvas), { timeout: 5000 }).toBeCloseTo(gradeOf(7), -1);
 
-    expect(fetches.mock.calls.filter(([input]) => urlOf(input) === missing)).toHaveLength(1);
+    expect(requestsFor(fetches, missing)).toBe(1);
     expect(decodesOf(decodes, brokenBytes.length)).toBe(1);
-    expect(countPixels(pixels, (red, green, blue) => red + green + blue < 30)).toBe(0);
+  });
+
+  it("keeps loading the stage after network errors", async () => {
+    const shot = await gradedShot();
+    const unreachable = shot.slice(1, 7).map((url) => `${url}#unreachable`);
+    const fetches = failingNetwork({ missing: "", unreachable });
+    const progress = { value: 0 };
+    const canvas = await mountFootage(
+      [[...shot.slice(0, 1), ...unreachable, ...shot.slice(7)]],
+      progress,
+    );
+
+    progress.value = progressAt(9);
+    await expect.poll(() => gradeOnScreen(canvas), { timeout: 5000 }).toBeCloseTo(gradeOf(9), -1);
+
+    expect(shot.slice(7).map((url) => requestsFor(fetches, url))).not.toContain(0);
   });
 });
 ```
@@ -797,9 +863,9 @@ Why it is shaped this way:
 
 - The first frame comes through `useLoader(ImageBitmapLoader, …)`, which suspends: the scene mounts with the poster's frame already decoded, so its first drawn frame is the poster and the crossfade does not pop.
 - The frame store, the textures and the material are made in the effect that disposes them (`useSceneResource`): under StrictMode in development, a store created during render would be aborted by the first cleanup and never load another frame. The same holds for the clip: `openClip` in the effect, `closeClip` in its cleanup.
-- The crop is chosen from the stage's own box when the scene mounts: the portrait frames only when the box is at most 506/900 as wide as it is tall, where their crop matches the poster's cover crop. A tablet held upright (0.75) or a 4:5 stage would zoom the portrait crop 1.33 times and upscale it, so those boxes use the landscape frames.
+- The crop is chosen from the stage's own box when the scene mounts: the portrait frames when the box is at most 3:4 (every phone, with or without its toolbar, and a tablet held upright), where their crop matches the poster's cover crop; wider boxes use the landscape frames.
 - One store per stage: frames are fetched as compressed blobs (about 6 MB for a whole desktop stage) and decoded on demand with `createImageBitmap`, off the main thread. Only 8 decoded frames stay, the farthest from the playhead closing first; the playhead and the prepared frame never close. 150 decoded 1600×900 frames would take 860 MB.
-- A frame that fails stays requested and missing: a non-OK response is never stored, a blob that does not decode is dropped, so neither is asked or decoded again, and the nearest neighbour stands in.
+- A frame that fails stays requested and missing: a non-OK response or a network error is never stored, a blob that does not decode is dropped, so neither is asked or decoded again, and the nearest neighbour stands in. Each request catches its own failure: a rejection that escaped would end its worker, and six transient errors would stop the whole stage. Only the store closing stops the workers.
 - The next shot's first frame is decoded from the middle of the current shot and uploaded to the second texture before the dissolve starts; the dissolve stays at 0 until it is there.
 - `imageOrientation: "flipY"` at decode, `flipY: false` on the texture: three's `flipY` does nothing on an `ImageBitmap`, and a frame decoded without the flip draws upside down. No mipmaps: a frame change is one upload.
 - Materials are built imperatively, and writes go through module-level functions, for the reasons in `shader-craft` §3.
