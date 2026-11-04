@@ -26,12 +26,12 @@ Premium animated pages rely on live shaders, GPU particles, scroll-driven video,
 
 ## Decision outcome
 
-Chosen option: "WebGL2 with React Three Fiber 9 and the pmndrs libraries, approved as a set", because it covers every technique in scope on stable releases, and approving the set once is what lets a run finish without a human. WebGPU loses as a default: the three r187 documentation still recommends `WebGLRenderer`, and React Three Fiber 10, which defaults to WebGPU, is alpha only. One ADR per library would stop every run at its first helper.
+Chosen option: "WebGL2 with React Three Fiber 9 and the pmndrs libraries, approved as a set", because it covers every technique in scope on stable releases, and approving the set once is what lets a run finish without a human. WebGPU loses as a default: the three.js documentation for LLMs (`llms.txt`, r187) still recommends `WebGLRenderer`, and React Three Fiber 10, which defaults to WebGPU, is alpha only. One ADR per library would stop every run at its first helper.
 
 Engine and libraries, with the versions checked on 2026-11-04:
 
 - WebGL2 is the default engine. WebGPU and TSL are allowed only when a scene exceeds one million particles.
-- `@react-three/fiber` 9 and `three` (ADR-0019).
+- `@react-three/fiber` 9 and `three`, already dependencies of `@repo/ui` (ADR-0025). The repository pins `three` 0.186.1, which sits below the `postprocessing` 6.x peer limit.
 - `@react-three/postprocessing` 3.x (3.2.2, peer React Three Fiber ≥ 9.7) with `postprocessing` 6.x (6.39.6, peer `three` < 0.188).
 - `@react-three/drei` 10.x (10.7.9). Helpers are imported one by one. Decoders are self-hosted, because the Draco loader of drei points to a third-party CDN by default.
 - `@sparkjsdev/spark` 2.x (2.4.0, MIT) renders Gaussian splats.
@@ -49,7 +49,7 @@ Coverage and installation:
 Licence policy for the code and assets a project ships:
 
 - Allowed: MIT, Apache-2.0, BSD, Zlib, CC0, and Magnific outputs under Magnific's terms (ADR-0018).
-- Excluded: LYGIA (Prosperity licence, non-commercial), Shadertoy code without an explicit permissive licence, self-hosted Hunyuan weights (their licence excludes the EU), Apple SHARP (research only) and the Blender MCP (ADR-0027). Hunyuan used through Magnific stays allowed as a Magnific output.
+- Excluded: LYGIA (Prosperity licence, non-commercial), Shadertoy code without an explicit permissive licence, self-hosted Hunyuan weights (their licence excludes the EU) and Apple SHARP (research only).
 
 ### Consequences
 
@@ -65,11 +65,12 @@ Licence policy for the code and assets a project ships:
 
 - React Three Fiber: https://r3f.docs.pmnd.rs
 - three.js: https://threejs.org/docs
+- three.js documentation for LLMs: https://github.com/mrdoob/three.js/blob/dev/docs/llms.txt
 - postprocessing: https://github.com/pmndrs/postprocessing
 - drei: https://github.com/pmndrs/drei
 - Spark: https://github.com/sparkjsdev/spark
 - Prosperity licence (LYGIA): https://prosperitylicense.com
-- Related: ADR-0003 (catalogs), ADR-0011 (motion), ADR-0025 (stage host), ADR-0026 (verification), ADR-0027 (production tooling), ADR-0028 (autonomous mode).
-- Amends ADR-0018: the first video component of a project no longer needs a project ADR.
-- Amends ADR-0019: `@react-three/drei` is no longer excluded.
+- Related: ADR-0003 (catalogs), ADR-0011 (motion), ADR-0019 (superseded by ADR-0025; its deferral of `@react-three/drei` ends here), ADR-0022 (media pipeline), ADR-0025 (stage host), ADR-0026 (verification), ADR-0027 (production tooling), ADR-0028 (autonomous mode).
+- Partially supersedes ADR-0018: its requirement that the first video of a project adds media components "through the `design-system` skill and an ADR". Video components built with the arsenal need no project ADR. The rest of ADR-0018 stays accepted.
+- Partially supersedes ADR-0022: its revisit condition "or video", now answered by this ADR. The rest of ADR-0022 stays accepted.
 - Revisit when React Three Fiber 10 reaches beta.

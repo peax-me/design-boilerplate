@@ -31,16 +31,16 @@ Chosen option: "Autonomous mode with two hard stops, self-check points and an al
 
 Hard stops:
 
-- A Magnific spend that would take the page past 30,000 credits. The agent counts with `simulate_cost` before every paid call.
+- A Magnific spend that would take the page past 30,000 credits. The agent counts with `simulate_cost` before every paid call and keeps the running total in `assets/provenance.json` (the record of ADR-0018), so the count survives a context reset.
 - A technical decision outside the accepted ADRs. The agent writes an ADR with `status: proposed` and stops. `pnpm check` stays red until the user accepts it.
 
 To keep the second stop rare, ADR-0024 to ADR-0027 fix the arsenal once: allowed libraries and their major versions, and the components, patterns and configuration the techniques imply.
 
-Self-check points: in an autonomous run, the validations of the existing skills become self-checks. The agent decides, logs its reason in `DESIGN.md` and reviews its own work with `motion-review` (ADR-0026). Interactive sessions keep the validations as they are.
+A run is autonomous when the `signature-experience` skill is started from a brief. In that run, the validations of the existing skills become self-checks: the agent decides, logs its reason in `DESIGN.md` and reviews its own work with `motion-review` (ADR-0026). The explicit yes before a paid call becomes the check against the cap above. Interactive sessions keep every validation as it is, including the explicit yes before each paid call.
 
-Permissions: `.claude/settings.json` gains an allow-list for the arsenal tools (`blender`, `ffmpeg`, the image encoders, the Magnific MCP tools, Playwright and Chrome DevTools). Tools that run JavaScript in the page, such as frame measurement, are allowed only against the project's local server. Runs keep the current permission mode of the Conductor workspaces.
+Permissions: `.claude/settings.json` gains an allow-list for the arsenal tools (`blender -b`, `ffmpeg`, the image encoders, and the Magnific, Playwright, Chrome DevTools and Blender MCP tools). Tools that run JavaScript in the page, such as frame measurement, are allowed only against the project's local server. Runs keep the current permission mode of the Conductor workspaces.
 
-Orchestration: the `signature-experience` skill starts from a sentence or a brief and chains product context, direction, choice of technique family, storyboard, visual plan, code, then verification, critique and correction in a loop until the quality grid passes.
+Orchestration: the `signature-experience` skill starts from a brief, even a single sentence, and chains product context, direction, choice of technique family, storyboard, visual plan, code, then verification, critique and correction in a loop until the quality grid passes.
 
 ### Consequences
 
@@ -49,10 +49,11 @@ Orchestration: the `signature-experience` skill starts from a sentence or a brie
 - Good, because spend is bounded per page.
 - Bad, because the agent grades its own work at the self-check points, which is weaker than a human validation; the automated checks of ADR-0026 and the user's review of the trial runs compensate.
 - Bad, because the allow-list pre-approves paid Magnific calls, so the 30,000 cap rests on the agent's count with `simulate_cost`, not on a technical limit.
+- Bad, because the allow-list also pre-approves Blender MCP calls, so agent-written Python runs in Blender without human review, bounded by safe mode (ADR-0027).
 - Bad, because any decision outside the accepted ADRs still halts the run until the user accepts an ADR.
 
 ## More information
 
 - Related: ADR-0001 (human approval), ADR-0014 (agent setup), ADR-0017 (Conductor workspaces), ADR-0024 to ADR-0027 (the arsenal).
-- Amends ADR-0018: in an autonomous run, the explicit yes before a paid call becomes a check against the per-page cap.
+- Partially supersedes ADR-0018: its rule of "`simulate_cost` and an explicit yes before any paid call", in autonomous runs only. Interactive sessions keep it. The rest of ADR-0018 stays accepted.
 - Revisit when the trial runs show that the stops fire too often or too rarely, or that the self-check points let defects through.

@@ -15,6 +15,7 @@ ADR-0019 gives `BlockStage`: a poster, a canvas loaded from `md` upward, nothing
 - Lighthouse performance ≥ 0.95 on mobile and desktop; a still poster is the LCP element and the canvas loads after it.
 - Reduced motion and missing WebGL2 show the complete page, with no `canvas`.
 - One animation clock: GSAP (ADR-0011).
+- Colours follow the design tokens, including runtime presets (ADR-0020).
 - Phones run the live effect in a lighter tier.
 - An effect cannot skip a guarantee.
 - The boilerplate contains no effect.
@@ -29,6 +30,12 @@ ADR-0019 gives `BlockStage`: a poster, a canvas loaded from `md` upward, nothing
 
 Chosen option: "One generic `Stage` host in `@repo/ui`", because the guarantees are written and tested once, an effect inherits them by construction, and the accessibility and performance rules cannot drift scene by scene. Copying the contract into each scene duplicates it, and posters only on phones drop the signature effect there.
 
+This ADR supersedes ADR-0019 entirely. Its decisions that still hold are restated here:
+
+- `three` and `@react-three/fiber` live in `@repo/ui` and are dependencies of the boilerplate. Apps never style (ADR-0007), so 3D stays out of pages.
+- The fallback is a poster, drawn from the same data as the scene or captured from the scene's first frame.
+- Materials read their colours from the design tokens at runtime; textures come from `asset-production` with a provenance record.
+
 `Stage` holds no effect: each project passes its own scene. Its contract:
 
 - The still poster renders first and is the LCP element.
@@ -39,12 +46,12 @@ Chosen option: "One generic `Stage` host in `@repo/ui`", because the guarantees 
 - A progress channel wired to `ScrollScene`.
 - `BlockStage` becomes the first user of `Stage`.
 
-The tier is chosen once at load and passed to the scene:
+The tier is chosen once at load and passed to the scene: `light` if the viewport is narrower than 48rem (the `md` breakpoint) or the primary pointer is coarse (`(pointer: coarse)`), otherwise `full`. There is no CPU-core criterion: CI runners report 4 cores and recent phones 8, so it separates nothing. Touch tablets get `light`; wide screens with a fine pointer get `full`.
 
-| Tier    | Device  | Loads                                                          | Pixel density | Particles                 |
-| ------- | ------- | -------------------------------------------------------------- | ------------- | ------------------------- |
-| `light` | Phones  | After idle, near the viewport, and after the first interaction | `[1, 1.5]`    | 32,768 (256×128 texture)  |
-| `full`  | Desktop | After idle, near the viewport                                  | `[1, 2]`      | 131,072 (512×256 texture) |
+| Tier    | Chosen when                                       | Loads                                                          | Pixel density | Particles                 |
+| ------- | ------------------------------------------------- | -------------------------------------------------------------- | ------------- | ------------------------- |
+| `light` | Viewport under 48rem, or a coarse primary pointer | After idle, near the viewport, and after the first interaction | `[1, 1.5]`    | 32,768 (256×128 texture)  |
+| `full`  | Otherwise                                         | After idle, near the viewport                                  | `[1, 2]`      | 131,072 (512×256 texture) |
 
 ### Consequences
 
@@ -53,11 +60,13 @@ The tier is chosen once at load and passed to the scene:
 - Good, because `BlockStage` stops carrying a contract of its own.
 - Bad, because phones now download three.js and run a live scene, with the battery and data cost that implies; the `light` tier and the first-interaction trigger limit it. This reverses the ADR-0019 consequence that phones never download three.js.
 - Bad, because Lighthouse neither interacts nor scrolls, so on phones it measures the poster path only; the real-GPU budgets of ADR-0026 cover the live scene. A visitor who never touches the page keeps the poster.
+- Bad, because on desktop the `full` scene loads after idle once it nears the viewport, so it can run during the Lighthouse audit. If the desktop budget fails, the escape route is to make `full` wait for a first interaction too.
 
 ## More information
 
 - React Three Fiber canvas: https://r3f.docs.pmnd.rs/api/canvas
 - GSAP ticker: https://gsap.com/docs/v3/GSAP/gsap.ticker/
-- Related: ADR-0011 (motion), ADR-0019 (3D stage), ADR-0024 (rendering arsenal), ADR-0026 (verification).
-- Amends ADR-0019: WebGL is loaded below `md`, on phones, in the `light` tier.
+- `(pointer: coarse)`: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer
+- Related: ADR-0007 (locked theme), ADR-0011 (motion), ADR-0020 (token presets), ADR-0024 (rendering arsenal), ADR-0026 (verification).
+- Supersedes ADR-0019. WebGL now loads below `md`, on phones, in the `light` tier.
 - Revisit when the trial runs show that the `light` tier misses the frame budget of ADR-0026 on phones, or when a scene needs a third tier.

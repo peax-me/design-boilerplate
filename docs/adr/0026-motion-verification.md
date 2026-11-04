@@ -8,15 +8,16 @@ decision-makers: [project owner]
 
 ## Context and problem statement
 
-The design audit and the design review see still frames. A blank, frozen or janky canvas passes both. Lighthouse runs on a single route, and frame times measured on SwiftShader (software WebGL, used in CI) say nothing about a real GPU. How does an agent see and judge the motion it produces, and which checks fail the build?
+The design audit and the design review see still frames. A blank, frozen or janky canvas passes both. Lighthouse CI collects `/` only, and frame times measured on SwiftShader (software WebGL, used in CI) say nothing about a real GPU. How does an agent see and judge the motion it produces, and which checks fail the build?
 
 ## Decision drivers
 
 - Agents must judge motion, not only screenshots.
 - A blank canvas, a frozen canvas, a shader error and a missing reduced-motion fallback fail automatically.
 - `pnpm test:e2e` runs without a GPU, so it cannot assert frame times.
-- Lighthouse budgets hold on every route, on mobile and on desktop (ADR-0016).
-- An unrelated console warning (React DevTools, HMR) must not fail the audit.
+- The Lighthouse budgets of ADR-0016 must hold on every route and on both form factors, not on `/` alone.
+- Console errors and warnings unrelated to WebGL or shaders (React DevTools, HMR) must not fail the audit.
+- Telemetry is off on every MCP server that allows it.
 
 ## Considered options
 
@@ -33,7 +34,7 @@ Motion check, run by `pnpm test:e2e` on SwiftShader:
 - Scripted scroll over progress steps, one capture per step, assembled into a contact sheet.
 - Blank canvas: the standard deviation of luminance on a 32×32 grid is below 2.
 - Frozen canvas: the mean difference between two captures 500 ms apart is below 0.5, where motion is expected.
-- A shader or WebGL error in the console fails the run. Any other warning does not.
+- A WebGL or shader error in the console fails the run. Console errors and warnings unrelated to WebGL or shaders do not.
 - A pass with reduced motion enabled.
 - The WebGL renderer string is logged.
 
@@ -43,8 +44,8 @@ Lighthouse on mobile and desktop for every route of `apps/web/e2e/support/routes
 
 MCP servers in `.mcp.json`:
 
-- `@playwright/mcp` moves from 0.0.83 to 0.0.84 with `--caps=devtools`, which adds video and tracing tools.
-- Chrome DevTools MCP 1.12.0 is added for performance traces, CPU throttling, screencast, Lighthouse and reduced-motion emulation.
+- `npx -y @playwright/mcp@0.0.84 --caps=devtools` replaces 0.0.83. The capability adds video and tracing tools.
+- `npx -y chrome-devtools-mcp@1.12.0 --no-usage-statistics` is added for performance traces, CPU throttling, screencast, Lighthouse and reduced-motion emulation. Chrome DevTools MCP sends usage statistics to Google unless that flag is set.
 
 The `motion-review` skill and the extended `design-reviewer` agent judge recordings and contact sheets against a written quality grid. The repository ships no reference image: the only images to compare against are the project's own references from `design-inspiration`.
 
@@ -56,11 +57,14 @@ The `motion-review` skill and the extended `design-reviewer` agent judge recordi
 - Bad, because the real-GPU run is local and manual; CI cannot assert frame times.
 - Bad, because the thresholds are starting values; the frozen check only applies where motion is expected, so a deliberately static scene must say so.
 - Bad, because Lighthouse on every route and form factor lengthens CI.
+- Bad, because the two MCP servers can run JavaScript in the page (ADR-0028 limits that to the project's local server).
 
 ## More information
 
 - Playwright MCP: https://github.com/microsoft/playwright-mcp
-- Chrome DevTools MCP: https://github.com/ChromeDevTools/chrome-devtools-mcp
+- Chrome DevTools MCP and its usage statistics: https://github.com/ChromeDevTools/chrome-devtools-mcp
 - Lighthouse CI: https://github.com/GoogleChrome/lighthouse-ci
-- Related: ADR-0012 (testing), ADR-0014 (agent setup), ADR-0016 (CI gates), ADR-0025 (stage host), ADR-0028 (autonomous mode).
+- Related: ADR-0012 (testing), ADR-0025 (stage host), ADR-0027 (Blender MCP, same telemetry rule), ADR-0028 (autonomous mode).
+- Partially supersedes ADR-0014: its list of project MCP servers (`next-devtools-mcp` and `@playwright/mcp`). Playwright moves to 0.0.84 with `--caps=devtools` and Chrome DevTools MCP joins the list. The rest of ADR-0014 stays accepted.
+- Partially supersedes ADR-0016: its Lighthouse CI gate, which sets budgets without a route or form-factor scope and collects `/` only. The gate now covers every route of `apps/web/e2e/support/routes.ts` on mobile and desktop, with the same budgets. The rest of ADR-0016 stays accepted.
 - Revisit after the trial runs, to adjust the thresholds, or when CI gets a real GPU, which would let the perf budgets move into the gates.
