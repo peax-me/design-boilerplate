@@ -7,11 +7,15 @@ import type { QualityTier } from "../src/lib/quality-tier.ts";
 import { StageCanvas } from "../src/scene/stage-canvas.tsx";
 
 const SETTLE_MS = 500;
+/* The first delta spans the time since the ticker started; later ones are one frame long. */
+const FRAMES_BEFORE_STEADY = 4;
 const DEVICE_PIXEL_RATIO = 3;
 const STAGE = { width: 240, height: 120 };
 
-function FrameCounter({ onFrame }: { onFrame: () => void }) {
-  useFrame(onFrame);
+function FrameCounter({ onFrame }: { onFrame: (delta: number) => void }) {
+  useFrame((_state, delta) => {
+    onFrame(delta);
+  });
   return (
     <mesh>
       <boxGeometry />
@@ -22,7 +26,7 @@ function FrameCounter({ onFrame }: { onFrame: () => void }) {
 
 interface StageProps {
   tier: QualityTier;
-  onFrame: () => void;
+  onFrame: (delta: number) => void;
   /* Page height above the canvas, to push it out of the window. */
   spacer?: string;
 }
@@ -60,6 +64,15 @@ describe("StageCanvas", () => {
     await render(<Stage tier="full" onFrame={onFrame} />);
 
     await expect.poll(() => onFrame.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it("reports each frame's delta in seconds", async () => {
+    const onFrame = vi.fn<(delta: number) => void>();
+    await render(<Stage tier="full" onFrame={onFrame} />);
+
+    await expect.poll(() => onFrame.mock.calls.length).toBeGreaterThan(FRAMES_BEFORE_STEADY);
+    const steadyDeltas = onFrame.mock.calls.slice(1).map(([delta]) => delta);
+    expect(Math.max(...steadyDeltas)).toBeLessThan(1);
   });
 
   it("renders no frame below the window and resumes once scrolled into view", async () => {

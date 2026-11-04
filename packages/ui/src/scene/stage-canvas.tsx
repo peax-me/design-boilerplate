@@ -6,7 +6,8 @@ import { useEffect } from "react";
 
 import { pixelRatio, type QualityTier } from "../lib/quality-tier.ts";
 
-/* R3F renders only when advanced (frameloop "never"): one clock, GSAP's, drives every scene, and an offscreen canvas costs no frame. */
+/* R3F renders only when advanced (frameloop "never"): one clock, GSAP's, drives every scene, and an offscreen canvas costs no frame.
+   R3F takes the advance timestamp in the unit of useFrame's delta and clock.elapsedTime, so the ticker's seconds go in as they are. */
 function TickerFrames(): null {
   const advance = useThree((state) => state.advance);
   const canvas = useThree((state) => state.gl.domElement);
@@ -22,7 +23,7 @@ function TickerFrames(): null {
 
     function advanceInWindow(time: number): void {
       if (inWindow) {
-        advance(time * 1000);
+        advance(time);
       }
     }
     gsap.ticker.add(advanceInWindow);
@@ -36,7 +37,7 @@ function TickerFrames(): null {
   return null;
 }
 
-interface StageCanvasProps extends Omit<CanvasProps, "dpr" | "frameloop"> {
+interface StageCanvasProps extends Omit<CanvasProps, "dpr" | "frameloop" | "gl"> {
   tier: QualityTier;
 }
 
