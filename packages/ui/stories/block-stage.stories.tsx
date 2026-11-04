@@ -20,7 +20,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Blocks drop into place as an isometric drawing, then, from the md breakpoint with motion allowed, a lit three.js scene replaces it once the page is idle. The drawing stays the accessible image and the fallback.",
+          "Blocks drop into place as an isometric drawing, then a lit three.js scene replaces it: at the full tier once the page is idle on desktop, at the light tier after a first interaction on phones and other touch devices. The drawing stays the accessible image and the fallback.",
       },
     },
   },

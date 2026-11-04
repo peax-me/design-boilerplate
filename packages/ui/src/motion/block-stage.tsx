@@ -2,23 +2,21 @@
 
 import { useGSAP } from "@gsap/react";
 import { gsap } from "gsap";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, useRef } from "react";
 
 import { IsoBlocks } from "../components/iso-blocks.tsx";
-import { cn } from "../lib/cn.ts";
-import { whenIdle } from "../lib/idle.ts";
 import type { Block } from "../lib/isometric.ts";
+import { Stage } from "./stage.tsx";
 import { duration, ease, stagger } from "./tokens.ts";
 
 gsap.registerPlugin(useGSAP);
 
 const ALLOW_MOTION = "(prefers-reduced-motion: no-preference)";
-const DEPTH_QUERY = `(min-width: 48rem) and ${ALLOW_MOTION}`;
 const DROP = -3;
 
-const BlockScene = lazy(async () => {
-  const { BlockScene: scene } = await import("../scene/block-scene.tsx");
-  return { default: scene };
+const LazyBlockScene = lazy(async () => {
+  const { BlockScene } = await import("../scene/block-scene.tsx");
+  return { default: BlockScene };
 });
 
 interface BlockStageProps {
@@ -29,12 +27,7 @@ interface BlockStageProps {
 }
 
 export function BlockStage({ blocks, label, grain, className }: BlockStageProps) {
-  const stage = useRef<HTMLDivElement>(null);
-  const [wantsDepth, setWantsDepth] = useState(false);
-  const [ready, setReady] = useState(false);
-  const onReady = useCallback(() => {
-    setReady(true);
-  }, []);
+  const drawing = useRef<HTMLDivElement>(null);
 
   useGSAP(
     () => {
@@ -48,43 +41,17 @@ export function BlockStage({ blocks, label, grain, className }: BlockStageProps)
         });
       });
     },
-    { scope: stage },
-  );
-
-  useEffect(
-    () =>
-      whenIdle(() => {
-        setWantsDepth(window.matchMedia(DEPTH_QUERY).matches);
-      }),
-    [],
+    { scope: drawing },
   );
 
   return (
-    <div
-      ref={stage}
-      data-slot="block-stage"
-      data-depth={ready ? "ready" : "poster"}
-      className={cn("relative", className)}
-    >
-      <IsoBlocks
-        blocks={blocks}
-        label={label}
-        grain={grain}
-        className={cn("transition-opacity duration-500", ready && "opacity-0")}
+    <div ref={drawing} data-slot="block-stage" className={className}>
+      <Stage
+        poster={<IsoBlocks blocks={blocks} label={label} grain={grain} />}
+        renderScene={(scene) => (
+          <LazyBlockScene {...scene} blocks={blocks} grain={grain} className="absolute -inset-12" />
+        )}
       />
-      {wantsDepth ? (
-        <Suspense fallback={null}>
-          <BlockScene
-            blocks={blocks}
-            grain={grain}
-            onReady={onReady}
-            className={cn(
-              "absolute -inset-12 transition-opacity duration-500",
-              ready ? "opacity-100" : "opacity-0",
-            )}
-          />
-        </Suspense>
-      ) : null}
     </div>
   );
 }
