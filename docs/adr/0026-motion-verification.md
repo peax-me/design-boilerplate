@@ -1,0 +1,66 @@
+---
+status: proposed
+date: 2026-11-04
+decision-makers: [project owner]
+---
+
+# 0026. Motion verification
+
+## Context and problem statement
+
+The design audit and the design review see still frames. A blank, frozen or janky canvas passes both. Lighthouse runs on a single route, and frame times measured on SwiftShader (software WebGL, used in CI) say nothing about a real GPU. How does an agent see and judge the motion it produces, and which checks fail the build?
+
+## Decision drivers
+
+- Agents must judge motion, not only screenshots.
+- A blank canvas, a frozen canvas, a shader error and a missing reduced-motion fallback fail automatically.
+- `pnpm test:e2e` runs without a GPU, so it cannot assert frame times.
+- Lighthouse budgets hold on every route, on mobile and on desktop (ADR-0016).
+- An unrelated console warning (React DevTools, HMR) must not fail the audit.
+
+## Considered options
+
+- A motion check in `packages/design-audit` on SwiftShader, a local real-GPU perf run, and Lighthouse on every route and form factor
+- Still screenshots only, as today
+- Frame-time assertions in CI on SwiftShader
+
+## Decision outcome
+
+Chosen option: "A motion check in `packages/design-audit`, a local real-GPU perf run, and Lighthouse on every route and form factor", because each check runs where its measure is meaningful. Still screenshots cannot tell a frozen canvas from a calm one, and SwiftShader timings would gate the build on a number that does not exist on a real device.
+
+Motion check, run by `pnpm test:e2e` on SwiftShader:
+
+- Scripted scroll over progress steps, one capture per step, assembled into a contact sheet.
+- Blank canvas: the standard deviation of luminance on a 32×32 grid is below 2.
+- Frozen canvas: the mean difference between two captures 500 ms apart is below 0.5, where motion is expected.
+- A shader or WebGL error in the console fails the run. Any other warning does not.
+- A pass with reduced motion enabled.
+- The WebGL renderer string is logged.
+
+Perf budgets on a real GPU, run locally: CPU throttled 4×, 95th percentile of frame times ≤ 20 ms, no long animation frame above 100 ms during scroll. These are starting values, adjusted after the trial runs.
+
+Lighthouse on mobile and desktop for every route of `apps/web/e2e/support/routes.ts`: performance ≥ 0.95, accessibility, best practices and SEO = 1.
+
+MCP servers in `.mcp.json`:
+
+- `@playwright/mcp` moves from 0.0.83 to 0.0.84 with `--caps=devtools`, which adds video and tracing tools.
+- Chrome DevTools MCP 1.12.0 is added for performance traces, CPU throttling, screencast, Lighthouse and reduced-motion emulation.
+
+The `motion-review` skill and the extended `design-reviewer` agent judge recordings and contact sheets against a written quality grid. The repository ships no reference image: the only images to compare against are the project's own references from `design-inspiration`.
+
+### Consequences
+
+- Good, because blank canvases, frozen canvases and shader errors fail `pnpm test:e2e`.
+- Good, because agents get a recording and a contact sheet, evidence of motion rather than a still.
+- Good, because Lighthouse covers every route on both form factors.
+- Bad, because the real-GPU run is local and manual; CI cannot assert frame times.
+- Bad, because the thresholds are starting values; the frozen check only applies where motion is expected, so a deliberately static scene must say so.
+- Bad, because Lighthouse on every route and form factor lengthens CI.
+
+## More information
+
+- Playwright MCP: https://github.com/microsoft/playwright-mcp
+- Chrome DevTools MCP: https://github.com/ChromeDevTools/chrome-devtools-mcp
+- Lighthouse CI: https://github.com/GoogleChrome/lighthouse-ci
+- Related: ADR-0012 (testing), ADR-0014 (agent setup), ADR-0016 (CI gates), ADR-0025 (stage host), ADR-0028 (autonomous mode).
+- Revisit after the trial runs, to adjust the thresholds, or when CI gets a real GPU, which would let the perf budgets move into the gates.

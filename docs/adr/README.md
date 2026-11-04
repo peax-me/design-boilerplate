@@ -27,3 +27,8 @@ Every technical decision in this repository (technologies, skills, MCP servers, 
 | 0021 | [Technology and brand logos from Simple Icons](0021-brand-logos-from-simple-icons.md)                      |
 | 0022 | [Media component and image pipeline](0022-media-component-and-image-pipeline.md)                           |
 | 0023 | [Static export to GitHub Pages](0023-static-export-to-github-pages.md)                                     |
+| 0024 | [Real-time rendering arsenal and licence policy](0024-real-time-rendering-arsenal.md)                      |
+| 0025 | [Stage host with quality tiers and live WebGL on phones](0025-stage-host-and-quality-tiers.md)             |
+| 0026 | [Motion verification](0026-motion-verification.md)                                                         |
+| 0027 | [Production tooling](0027-production-tooling.md)                                                           |
+| 0028 | [Autonomous mode](0028-autonomous-mode.md)                                                                 |
