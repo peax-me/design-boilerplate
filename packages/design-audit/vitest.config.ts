@@ -6,7 +6,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["src/analyze.ts"],
+      include: ["src/analyze.ts", "src/motion.ts"],
       thresholds: { lines: 100, functions: 100, branches: 100, statements: 100 },
     },
   },

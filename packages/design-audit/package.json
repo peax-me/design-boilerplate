@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     "./collect": "./src/collect.ts",
-    "./analyze": "./src/analyze.ts"
+    "./analyze": "./src/analyze.ts",
+    "./motion": "./src/motion.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
