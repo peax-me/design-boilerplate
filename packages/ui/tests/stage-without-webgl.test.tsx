@@ -4,8 +4,7 @@ import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 
 import { afterIdle, BoxStage, stageAt } from "./support/box-stage.tsx";
-
-const DESKTOP = { width: 1280, height: 800 };
+import { DESKTOP } from "./support/viewports.ts";
 
 /* The WebGL2 answer is kept for the page, and this file has a page of its own: the stub goes in before anything asks. */
 const getContext = vi.fn<(kind: string) => null>(() => null);

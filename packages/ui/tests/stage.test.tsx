@@ -6,12 +6,10 @@ import { page } from "vitest/browser";
 
 import type { SceneProps } from "../src/motion/stage.tsx";
 import { afterIdle, BoxStage, stageAt } from "./support/box-stage.tsx";
+import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
+import { DESKTOP, PHONE } from "./support/viewports.ts";
 
-const PHONE = { width: 390, height: 844 };
-const DESKTOP = { width: 1280, height: 800 };
-/* The scene loads lazily and its first frame waits for a WebGL context, slower when many browsers share the machine. */
-const LIVE_TIMEOUT = { timeout: 15_000 };
 const INTERACTIONS = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const;
 
 const renderFailure = new Error("The scene failed to render");

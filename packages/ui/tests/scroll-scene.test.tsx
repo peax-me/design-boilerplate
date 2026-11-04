@@ -8,9 +8,7 @@ import { CodeLine } from "../src/components/code-line.tsx";
 import { Container } from "../src/layout/container.tsx";
 import { ScrollScene } from "../src/motion/scroll-scene.tsx";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
-
-const PHONE = { width: 390, height: 844 };
-const DESKTOP = { width: 1280, height: 800 };
+import { DESKTOP, PHONE } from "./support/viewports.ts";
 
 afterEach(async () => {
   await allowMotion();

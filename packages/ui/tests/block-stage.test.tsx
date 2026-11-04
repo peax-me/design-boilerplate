@@ -6,12 +6,9 @@ import { page } from "vitest/browser";
 import type { Block } from "../src/lib/isometric.ts";
 import { BlockStage } from "../src/motion/block-stage.tsx";
 import { afterIdle, stageAt } from "./support/box-stage.tsx";
+import { LIVE_TIMEOUT } from "./support/live-timeout.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
-
-const PHONE = { width: 390, height: 844 };
-const DESKTOP = { width: 1280, height: 800 };
-/* The scene loads lazily and its first frame waits for a WebGL context, slower when many browsers share the machine. */
-const LIVE_TIMEOUT = { timeout: 15_000 };
+import { DESKTOP, PHONE } from "./support/viewports.ts";
 
 const blocks: Block[] = [
   { id: "plank", x: 0, y: 0, z: 0, width: 4, depth: 1, height: 1, material: "maple" },
@@ -55,6 +52,7 @@ describe("BlockStage", () => {
     const stage = stageAt(screen.container);
 
     await afterIdle();
+    expect(stage.dataset["stage"]).toBe("poster");
     expect(stage.querySelector("canvas")).toBeNull();
 
     window.dispatchEvent(new Event("pointerdown"));
@@ -72,6 +70,9 @@ describe("BlockStage", () => {
 
     document.documentElement.dataset["paint"] = "green";
     window.dispatchEvent(new PointerEvent("pointermove", { clientX: 10, clientY: 10 }));
+    await afterIdle();
+
+    expect(stageAt(screen.container).dataset["stage"]).toBe("live");
     await expect.element(screen.getByRole("img", { name: "Desk pieces" })).toBeInTheDocument();
   });
 });
