@@ -38,7 +38,7 @@ To keep the second stop rare, ADR-0024 to ADR-0027 fix the arsenal once: allowed
 
 A run is autonomous when the `signature-experience` skill is started from a brief. In that run, the validations of the existing skills become self-checks: the agent decides, logs its reason in `DESIGN.md` and reviews its own work with `motion-review` (ADR-0026). The explicit yes before a paid call becomes the check against the cap above. Interactive sessions keep every validation as it is, including the explicit yes before each paid call.
 
-Permissions: `.claude/settings.json` gains an allow-list for the arsenal tools (`blender -b`, `ffmpeg`, the image encoders, and the Magnific, Playwright, Chrome DevTools and Blender MCP tools). Tools that run JavaScript in the page, such as frame measurement, are allowed only against the project's local server. Runs keep the current permission mode of the Conductor workspaces.
+Permissions: `.claude/settings.json` gains an allow-list for the arsenal tools (`blender -b`, `ffmpeg`, the image encoders, and the Magnific, Playwright, Chrome DevTools and Blender MCP tools). Tools that run JavaScript in the page, such as frame measurement, are to be used only against the project's local server. That is a rule of the skills, not a permission: `mcp__playwright` and `mcp__chrome-devtools` are allowed wholesale, and Claude Code permissions cannot filter MCP calls by URL. Runs keep the current permission mode of the Conductor workspaces.
 
 Orchestration: the `signature-experience` skill starts from a brief, even a single sentence, and chains product context, direction, choice of technique family, storyboard, visual plan, code, then verification, critique and correction in a loop until the quality grid passes.
 
@@ -49,7 +49,8 @@ Orchestration: the `signature-experience` skill starts from a brief, even a sing
 - Good, because spend is bounded per page.
 - Bad, because the agent grades its own work at the self-check points, which is weaker than a human validation; the automated checks of ADR-0026 and the user's review of the trial runs compensate.
 - Bad, because the allow-list pre-approves paid Magnific calls, so the 30,000 cap rests on the agent's count with `simulate_cost`, not on a technical limit.
-- Bad, because the allow-list also pre-approves Blender MCP calls, so agent-written Python runs in Blender without human review, bounded by safe mode (ADR-0027).
+- Bad, because the allow-list also pre-approves Blender MCP calls and `blender -b`, so in autonomous runs agent-written Python runs in Blender without human review. The MCP path is bounded by safe mode. The headless path has no safe mode and rests on the scripts being versioned in the project (ADR-0027).
+- Bad, because the limit of page-scripting tools to the project's local server is a skill rule that permissions cannot enforce.
 - Bad, because any decision outside the accepted ADRs still halts the run until the user accepts an ADR.
 
 ## More information

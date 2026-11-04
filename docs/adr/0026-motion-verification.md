@@ -42,10 +42,12 @@ Perf budgets on a real GPU, run locally: CPU throttled 4×, 95th percentile of f
 
 Lighthouse on mobile and desktop for every route of `apps/web/e2e/support/routes.ts`: performance ≥ 0.95, accessibility, best practices and SEO = 1.
 
-MCP servers in `.mcp.json`:
+MCP servers in `.mcp.json`, with telemetry off on every server that allows it:
 
-- `npx -y @playwright/mcp@0.0.84 --caps=devtools` replaces 0.0.83. The capability adds video and tracing tools.
+- `npx -y @playwright/mcp@0.0.84 --caps=devtools` replaces 0.0.83. The capability adds video and tracing tools. Playwright MCP has no telemetry option.
 - `npx -y chrome-devtools-mcp@1.12.0 --no-usage-statistics` is added for performance traces, CPU throttling, screencast, Lighthouse and reduced-motion emulation. Chrome DevTools MCP sends usage statistics to Google unless that flag is set.
+- `next-devtools-mcp@0.4.0` stays and gains the `env` entry `NEXT_TELEMETRY_DISABLED=1`.
+- The Blender MCP joins the list through ADR-0027, with its own telemetry setting.
 
 The `motion-review` skill and the extended `design-reviewer` agent judge recordings and contact sheets against a written quality grid. The repository ships no reference image: the only images to compare against are the project's own references from `design-inspiration`.
 
@@ -57,14 +59,14 @@ The `motion-review` skill and the extended `design-reviewer` agent judge recordi
 - Bad, because the real-GPU run is local and manual; CI cannot assert frame times.
 - Bad, because the thresholds are starting values; the frozen check only applies where motion is expected, so a deliberately static scene must say so.
 - Bad, because Lighthouse on every route and form factor lengthens CI.
-- Bad, because the two MCP servers can run JavaScript in the page (ADR-0028 limits that to the project's local server).
+- Bad, because the two browser MCP servers can run JavaScript in the page. Limiting that to the project's local server is a skill rule that permissions cannot enforce (ADR-0028).
 
 ## More information
 
 - Playwright MCP: https://github.com/microsoft/playwright-mcp
 - Chrome DevTools MCP and its usage statistics: https://github.com/ChromeDevTools/chrome-devtools-mcp
 - Lighthouse CI: https://github.com/GoogleChrome/lighthouse-ci
-- Related: ADR-0012 (testing), ADR-0025 (stage host), ADR-0027 (Blender MCP, same telemetry rule), ADR-0028 (autonomous mode).
-- Partially supersedes ADR-0014: its list of project MCP servers (`next-devtools-mcp` and `@playwright/mcp`). Playwright moves to 0.0.84 with `--caps=devtools` and Chrome DevTools MCP joins the list. The rest of ADR-0014 stays accepted.
+- Related: ADR-0012 (testing), ADR-0025 (stage host), ADR-0027 (Blender MCP), ADR-0028 (autonomous mode).
+- Partially supersedes ADR-0014: its list of pinned project MCP servers (`next-devtools-mcp` and `@playwright/mcp`). Playwright moves to 0.0.84 with `--caps=devtools`, `next-devtools-mcp` gains `NEXT_TELEMETRY_DISABLED=1`, and Chrome DevTools MCP (this ADR) and the Blender MCP (ADR-0027) join the list. The rest of ADR-0014 stays accepted.
 - Partially supersedes ADR-0016: its Lighthouse CI gate, which sets budgets without a route or form-factor scope and collects `/` only. The gate now covers every route of `apps/web/e2e/support/routes.ts` on mobile and desktop, with the same budgets. The rest of ADR-0016 stays accepted.
 - Revisit after the trial runs, to adjust the thresholds, or when CI gets a real GPU, which would let the perf budgets move into the gates.

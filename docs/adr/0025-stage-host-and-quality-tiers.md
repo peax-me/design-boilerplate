@@ -4,7 +4,7 @@ date: 2026-11-04
 decision-makers: [project owner]
 ---
 
-# 0025. Stage host with quality tiers and live WebGL on phones
+# 0025. Stage host with quality tiers and live WebGL on touch devices
 
 ## Context and problem statement
 
@@ -16,7 +16,7 @@ ADR-0019 gives `BlockStage`: a poster, a canvas loaded from `md` upward, nothing
 - Reduced motion and missing WebGL2 show the complete page, with no `canvas`.
 - One animation clock: GSAP (ADR-0011).
 - Colours follow the design tokens, including runtime presets (ADR-0020).
-- Phones run the live effect in a lighter tier.
+- Phones and other touch devices run the live effect in a lighter tier.
 - An effect cannot skip a guarantee.
 - The boilerplate contains no effect.
 
@@ -58,8 +58,8 @@ The tier is chosen once at load and passed to the scene: `light` if the viewport
 - Good, because accessibility, fallback and clock are guaranteed in one place.
 - Good, because the first paint and every fallback stay free of WebGL, and the LCP is a still image.
 - Good, because `BlockStage` stops carrying a contract of its own.
-- Bad, because phones now download three.js and run a live scene, with the battery and data cost that implies; the `light` tier and the first-interaction trigger limit it. This reverses the ADR-0019 consequence that phones never download three.js.
-- Bad, because Lighthouse neither interacts nor scrolls, so on phones it measures the poster path only; the real-GPU budgets of ADR-0026 cover the live scene. A visitor who never touches the page keeps the poster.
+- Bad, because phones and other touch devices now download three.js and run a live scene, with the battery and data cost that implies; the `light` tier and the first-interaction trigger limit it. This reverses the ADR-0019 consequence that phones never download three.js.
+- Bad, because Lighthouse neither interacts nor scrolls, so on light-tier devices it measures the poster path only; the real-GPU budgets of ADR-0026 cover the live scene. A visitor who never touches the page keeps the poster.
 - Bad, because on desktop the `full` scene loads after idle once it nears the viewport, so it can run during the Lighthouse audit. If the desktop budget fails, the escape route is to make `full` wait for a first interaction too.
 
 ## More information
@@ -68,5 +68,5 @@ The tier is chosen once at load and passed to the scene: `light` if the viewport
 - GSAP ticker: https://gsap.com/docs/v3/GSAP/gsap.ticker/
 - `(pointer: coarse)`: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer
 - Related: ADR-0007 (locked theme), ADR-0011 (motion), ADR-0020 (token presets), ADR-0024 (rendering arsenal), ADR-0026 (verification).
-- Supersedes ADR-0019. WebGL now loads below `md`, on phones, in the `light` tier.
+- Supersedes ADR-0019. WebGL now loads below `md`, on phones and other touch devices, in the `light` tier.
 - Revisit when the trial runs show that the `light` tier misses the frame budget of ADR-0026 on phones, or when a scene needs a third tier.
