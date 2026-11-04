@@ -1,13 +1,14 @@
 # Effect skeleton
 
-Three files that typecheck, lint and format as written in this repository (`pnpm --filter @repo/ui typecheck`, `oxlint --type-aware`, `oxfmt`), and whose uniforms were checked in a browser: writing `uProgress` from the page object changes the drawn pixels. Rename `Effect` to the effect's name, replace the fragment shader with the recipe, and keep the structure: it carries the clock, pointer and lint rules of `SKILL.md` §3.
+Four files that typecheck, lint and format as written in this repository (`pnpm --filter @repo/ui typecheck`, `oxlint --type-aware`, `oxfmt`), and that were run in a browser (Vitest browser mode): writing `uProgress` from the page object changes the drawn pixels; in `cover` mode the stage fills the window and poster, image and canvas share its box; in `poster` mode the stage takes the poster's height and the canvas matches it; an ambient stage shows its pause control once live. The test file goes red on a compile error and on a blank frame. Rename `Effect` to the effect's name and replace the fragment shader with the recipe.
 
 ## `packages/ui/src/motion/<effect>-stage.tsx`
 
 ```tsx
 "use client";
 
-import { lazy, type ReactElement } from "react";
+import { cva } from "class-variance-authority";
+import { lazy, type ReactElement, type ReactNode } from "react";
 
 import { Stage } from "./stage.tsx";
 
@@ -16,25 +17,64 @@ const LazyEffectScene = lazy(async () => {
   return { default: EffectScene };
 });
 
+/* cover: the stage fills the window and its poster covers it, cropped like the canvas (coverUv).
+   poster: the stage takes the poster's own height, so canvas and poster share one box and aspect. */
+const stageVariants = cva("col-start-1 row-start-1 w-full", {
+  variants: {
+    fit: {
+      cover: "h-dvh [&_img]:size-full [&_img]:object-cover",
+      poster: "[&_img]:h-auto [&_img]:w-full",
+    },
+  },
+});
+
 interface EffectStageProps {
   /* A next/image element of the scene's first frame: the LCP, the reduced-motion page and the accessible name (alt). */
   poster: ReactElement;
   /* A stable { value } object the page's ScrollScene choreography tweens from 0 to 1. */
   progress: { value: number };
+  /* The poster's width over height, from its static import: poster.width / poster.height. */
+  posterAspect: number;
+  fit?: "cover" | "poster";
+  /* Copy laid over the effect, on a veil of the background token that keeps it readable over any frame. */
+  children?: ReactNode;
 }
 
-export function EffectStage({ poster, progress }: EffectStageProps) {
+export function EffectStage({
+  poster,
+  progress,
+  posterAspect,
+  fit = "poster",
+  children,
+}: EffectStageProps) {
   return (
-    <Stage
-      ambient
-      poster={poster}
-      renderScene={(scene) => <LazyEffectScene {...scene} progress={progress} />}
-    />
+    <div data-slot="effect-stage" className="grid">
+      <Stage
+        ambient
+        className={stageVariants({ fit })}
+        poster={poster}
+        renderScene={(scene) => (
+          <LazyEffectScene {...scene} progress={progress} posterAspect={posterAspect} />
+        )}
+      />
+      {children === undefined ? null : (
+        <>
+          <div
+            aria-hidden
+            className="col-start-1 row-start-1 bg-linear-to-r from-background to-transparent"
+          />
+          <div className="col-start-1 row-start-1 self-center">{children}</div>
+        </>
+      )}
+    </div>
   );
 }
 ```
 
-When copy sits on the effect, the component takes it as `children` and owns the layering in one grid cell: the `Stage`, a veil (a gradient of the background token, as a `cva` variant), then the copy. Frame the poster image like the canvas: `object-fit: cover` in the same box (`[&_img]:size-full [&_img]:object-cover` on the wrapper, as `Media` does).
+- `fit="cover"`: the stage is sized by its class (`h-dvh`), the poster layer fills it, and the image covers it (`object-fit: cover`) exactly as `coverUv` crops the canvas. Pass a `next/image` with `fill`, or any image: the wrapper sizes it.
+- `fit="poster"`: the stage takes the poster's own height; canvas and poster share one box, and `coverUv` is the identity.
+- The veil sits on the side where the copy is: change the gradient direction in the component, never in the page. Its opacity is set by the contrast rule of `SKILL.md` §6.
+- `pauseLabel` and `playLabel` of `Stage` default to English: pass the page language's words through the effect component when the site is not in English.
 
 ## `packages/ui/src/scene/<effect>-scene.tsx`
 
@@ -49,24 +89,30 @@ import { ShaderMaterial, Vector2 } from "three";
 import type { QualityTier } from "../lib/quality-tier.ts";
 import type { SceneProps } from "../motion/stage.tsx";
 import { duration, ease } from "../motion/tokens.ts";
+import { COVER_UV, FULL_SCREEN } from "./shader-chunks.ts";
 import { StageCanvas } from "./stage-canvas.tsx";
 import { useFirstFrame } from "./use-first-frame.ts";
 
-const FULL_SCREEN = `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const MARCH_STEPS: Record<QualityTier, number> = { light: 48, full: 96 };
+/* Replace with the effect's shader; the chunks it needs come from shader-chunks.ts. */
 const fragmentShader = `
   uniform float uTime;
   uniform float uProgress;
   uniform vec2 uPointer;
   uniform vec2 uResolution;
+  uniform float uPosterAspect;
+  ${COVER_UV}
   void main() {
-    gl_FragColor = vec4(gl_FragCoord.xy / uResolution, uProgress, 1.0);
+    vec2 uv = coverUv(gl_FragCoord.xy, uResolution, uPosterAspect);
+    gl_FragColor = vec4(uv, uProgress, 1.0);
     #include <colorspace_fragment>
   }
 `;
 
 interface EffectPlaneProps extends SceneProps {
   progress: { value: number };
+  /* The poster's width over height: coverUv frames the canvas like the poster in any box. */
+  posterAspect: number;
 }
 
 function useSmoothedPointer(): Vector2 {
@@ -94,12 +140,13 @@ function useSmoothedPointer(): Vector2 {
 }
 
 /* Built imperatively: the material keeps this very uniforms object, while R3F's uniforms prop copies it. */
-function createEffect(pointer: Vector2, tier: QualityTier) {
+export function createEffect(pointer: Vector2, tier: QualityTier, posterAspect: number) {
   const uniforms = {
     uTime: { value: 0 },
     uProgress: { value: 0 },
     uPointer: { value: pointer },
     uResolution: { value: new Vector2() },
+    uPosterAspect: { value: posterAspect },
   };
   const material = new ShaderMaterial({
     uniforms,
@@ -120,9 +167,9 @@ function advance(uniforms: EffectUniforms, frame: { delta: number; progress: num
   uProgress.value = frame.progress;
 }
 
-function EffectPlane({ tier, onReady, progress }: EffectPlaneProps) {
+function EffectPlane({ tier, onReady, progress, posterAspect }: EffectPlaneProps) {
   const pointer = useSmoothedPointer();
-  const [effect] = useState(() => createEffect(pointer, tier));
+  const [effect] = useState(() => createEffect(pointer, tier, posterAspect));
   useEffect(
     () => () => {
       effect.material.dispose();
@@ -141,10 +188,10 @@ function EffectPlane({ tier, onReady, progress }: EffectPlaneProps) {
   );
 }
 
-export function EffectScene({ tier, onReady, progress }: EffectPlaneProps) {
+export function EffectScene(props: EffectPlaneProps) {
   return (
-    <StageCanvas tier={tier} flat className="absolute inset-0">
-      <EffectPlane tier={tier} onReady={onReady} progress={progress} />
+    <StageCanvas tier={props.tier} flat className="absolute inset-0">
+      <EffectPlane {...props} />
     </StageCanvas>
   );
 }
@@ -154,8 +201,79 @@ Why it is shaped this way:
 
 - The `ShaderMaterial` is built imperatively and passed as `material`: React Three Fiber 9 copies a `uniforms` prop into the material's own uniform objects, so writes to the object you passed never reach the GPU. A material constructed with `uniforms` keeps that very object.
 - `advance` lives outside the component because the React Compiler lint (`react(immutability)`) rejects writing to a `useState` or `useMemo` value inside a `useFrame` callback, and reading `ref.current` during render (`react(refs)`) rules out a ref-held uniforms object.
-- The material is disposed on unmount; the stage unmounts the scene on a lost context, reduced motion or an error.
-- Token colours: wrap the canvas in a host `div` (`const [host, setHost] = useState<HTMLDivElement | null>(null)`, as `block-scene.tsx` does), resolve the tokens on it and copy them into colour uniforms when they change (`SKILL.md` §6).
+- `createEffect` is exported: the shader test builds the material with it, without mounting a stage.
+- The material is disposed on unmount; the stage unmounts the scene on a lost context, reduced motion or an error. A paused stage stops advancing the canvas: `uTime` stops with it and the frame holds.
+- Token colours: wrap the canvas in a host `div` (`const [host, setHost] = useState<HTMLDivElement | null>(null)`), resolve the tokens on it and write them into colour uniforms when they change (`SKILL.md` §6).
+
+## `packages/ui/tests/<effect>-scene.test.tsx`
+
+Tests first: write this file before the shader, watch it fail, then make it pass. `onShaderError` turns a compile or link error into a thrown error (three only logs it otherwise), and the readback catches a shader that compiles but draws nothing, with the motion audit's own blank threshold.
+
+```tsx
+import {
+  Mesh,
+  OrthographicCamera,
+  PlaneGeometry,
+  Scene,
+  type ShaderMaterial,
+  Vector2,
+  WebGLRenderer,
+} from "three";
+import { describe, expect, it } from "vitest";
+
+import type { QualityTier } from "../src/lib/quality-tier.ts";
+import { createEffect } from "../src/scene/effect-scene.tsx";
+
+const SIZE = 32;
+/* The motion audit's blank threshold (ADR-0026): luminance spread under 2 is an empty canvas. */
+const BLANK_SPREAD = 2;
+
+/* Draws one frame of the material, failing on any compile or link error instead of logging it. */
+function drawOnce(material: ShaderMaterial): Uint8Array {
+  const renderer = new WebGLRenderer();
+  renderer.setSize(SIZE, SIZE);
+  renderer.debug.onShaderError = (gl, ...[, vertexShader, fragmentShader]) => {
+    const logs = [gl.getShaderInfoLog(fragmentShader), gl.getShaderInfoLog(vertexShader)];
+    throw new Error(
+      logs.filter((log) => log !== null && log !== "").join("\n") || "The shader did not link.",
+    );
+  };
+  const scene = new Scene().add(new Mesh(new PlaneGeometry(2, 2), material));
+  renderer.render(scene, new OrthographicCamera());
+  const pixels = new Uint8Array(SIZE * SIZE * 4);
+  const gl = renderer.getContext();
+  gl.readPixels(0, 0, SIZE, SIZE, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  renderer.dispose();
+  return pixels;
+}
+
+function luminanceSpread(pixels: Uint8Array): number {
+  const luminance = Array.from({ length: pixels.length / 4 }, (_, index) => {
+    const offset = index * 4;
+    return (
+      0.2126 * (pixels[offset] ?? 0) +
+      0.7152 * (pixels[offset + 1] ?? 0) +
+      0.0722 * (pixels[offset + 2] ?? 0)
+    );
+  });
+  const mean = luminance.reduce((sum, value) => sum + value, 0) / luminance.length;
+  return Math.sqrt(
+    luminance.reduce((sum, value) => sum + (value - mean) ** 2, 0) / luminance.length,
+  );
+}
+
+describe("effect scene shader", () => {
+  it.each<QualityTier>(["light", "full"])(
+    "compiles and draws a frame that is not blank on the %s tier",
+    (tier) => {
+      const { material, uniforms } = createEffect(new Vector2(), tier, 16 / 9);
+      uniforms.uResolution.value.set(SIZE, SIZE);
+
+      expect(luminanceSpread(drawOnce(material))).toBeGreaterThan(BLANK_SPREAD);
+    },
+  );
+});
+```
 
 ## `apps/web/src/features/<feature>/<name>-scene.tsx`
 
@@ -177,11 +295,14 @@ export function EffectHero() {
   return (
     <ScrollScene choreography={choreography} length="medium">
       <EffectStage
+        fit="cover"
         progress={progress}
+        posterAspect={poster.width / poster.height}
         poster={
           <Image
             src={poster}
             alt="<what the first frame shows>"
+            fill
             sizes="100vw"
             loading="eager"
             fetchPriority="high"
@@ -193,4 +314,4 @@ export function EffectHero() {
 }
 ```
 
-The page owns the progress object (`useState` keeps it stable) and tweens it beside its copy reveals; the scene reads it every frame. Under reduced motion the choreography never runs and the poster stays.
+The page owns the progress object (`useState` keeps it stable) and tweens it beside its copy reveals; the scene reads it every frame. Under reduced motion the choreography never runs and the poster stays. `posterAspect` comes from the static import's intrinsic size.
