@@ -19,7 +19,11 @@ interface BoxStageProps {
 /* A stage with a named drawing of a box as its poster and the neutral box as its scene. */
 export function BoxStage({ name, ambient = false }: BoxStageProps) {
   return (
-    <Stage poster={<IsoBlocks blocks={box} label={name} />} scene={plainScene} ambient={ambient} />
+    <Stage
+      poster={<IsoBlocks blocks={box} label={name} />}
+      renderScene={plainScene}
+      ambient={ambient}
+    />
   );
 }
 

@@ -17,13 +17,13 @@ const meta = {
     docs: {
       description: {
         component:
-          "Hosts a WebGL scene over its poster. The poster is the complete still image and carries the accessible name. The scene loads once the page is idle, the device runs WebGL2 without reduced motion and the stage comes within half a window of the viewport; on phones it also waits for a first interaction. It fades in once its first frame is drawn, and a lost context or reduced motion brings the poster back. Pass the scene as a render function of a lazy component holding a StageCanvas.",
+          "Hosts a WebGL scene over its poster. The poster is the complete still image and carries the accessible name. The scene loads once the page is idle, the device runs WebGL2 without reduced motion and the stage comes within half a window of the viewport; on phones it also waits for a first interaction. It fades in once its first frame is drawn, and a lost context or reduced motion brings the poster back. renderScene returns a lazy component holding a StageCanvas.",
       },
     },
   },
   args: {
     poster: <IsoBlocks blocks={box} label="A plain box" />,
-    scene: plainScene,
+    renderScene: plainScene,
     className: "max-w-xl",
   },
 } satisfies Meta<typeof Stage>;

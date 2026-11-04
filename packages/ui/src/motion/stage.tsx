@@ -151,13 +151,18 @@ interface StageProps {
   /* The complete still image, shown first and whenever the scene cannot run: it carries the accessible name. */
   poster: ReactNode;
   /* Renders a lazy component holding a StageCanvas; it calls onReady once its first frame is drawn. */
-  scene: (props: SceneProps) => ReactNode;
+  renderScene: (props: SceneProps) => ReactNode;
   /* The scene moves on its own: the motion audit expects its frames to change. */
   ambient?: boolean;
   className?: string;
 }
 
-export function Stage({ poster, scene, ambient = false, className }: StageProps): ReactElement {
+export function Stage({
+  poster,
+  renderScene,
+  ambient = false,
+  className,
+}: StageProps): ReactElement {
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [ready, setReady] = useState(false);
   const onReady = useCallback(() => {
@@ -177,7 +182,7 @@ export function Stage({ poster, scene, ambient = false, className }: StageProps)
       <div className={fadeVariants({ shown: !live })}>{poster}</div>
       {tier === null ? null : (
         <div aria-hidden className={cn("absolute inset-0", fadeVariants({ shown: live }))}>
-          <Suspense fallback={null}>{scene({ tier, onReady })}</Suspense>
+          <Suspense fallback={null}>{renderScene({ tier, onReady })}</Suspense>
         </div>
       )}
     </div>
