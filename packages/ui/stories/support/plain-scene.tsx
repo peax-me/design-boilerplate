@@ -1,9 +1,9 @@
-import { useFrame } from "@react-three/fiber";
-import { lazy, useRef } from "react";
+import { lazy } from "react";
 
 import type { Block } from "../../src/lib/isometric.ts";
 import type { SceneProps } from "../../src/motion/stage.tsx";
 import { StageCanvas } from "../../src/scene/stage-canvas.tsx";
+import { useFirstFrame } from "../../src/scene/use-first-frame.ts";
 
 /* The same box drawn flat, for a poster. */
 export const plainBox: Block[] = [
@@ -14,15 +14,7 @@ export const plainBox: Block[] = [
 const TURN: [number, number, number] = [0.5, 0.6, 0];
 
 function Box({ onReady }: Pick<SceneProps, "onReady">) {
-  const drawn = useRef(false);
-
-  useFrame(() => {
-    if (drawn.current) {
-      return;
-    }
-    drawn.current = true;
-    onReady();
-  });
+  useFirstFrame(onReady);
 
   return (
     <mesh rotation={TURN}>

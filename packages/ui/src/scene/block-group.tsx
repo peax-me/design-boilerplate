@@ -1,6 +1,6 @@
 "use client";
 
-import { extend, type ThreeElement, useFrame, useLoader, useThree } from "@react-three/fiber";
+import { extend, type ThreeElement, useLoader, useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import {
@@ -17,6 +17,7 @@ import { type Block, type Material, cornerRadius } from "../lib/isometric.ts";
 import { duration, ease, stagger } from "../motion/tokens.ts";
 import { centre } from "./centre.ts";
 import { type Tokens, useTokens } from "./scene-tokens.ts";
+import { useFirstFrame } from "./use-first-frame.ts";
 
 extend({ RoundedBoxGeometry });
 
@@ -151,21 +152,13 @@ interface BlockGroupProps {
 export function BlockGroup({ blocks, grain, host, onReady }: BlockGroupProps) {
   const group = useRef<Group>(null);
   const meshes = useRef<Mesh[]>([]);
-  const drawn = useRef(false);
   const [onChange] = useState(() => () => {
     hop(meshes.current);
   });
   const tokens = useTokens(host, onChange);
   const centreAt = centre(blocks);
   usePointerTilt(group);
-
-  useFrame(() => {
-    if (drawn.current) {
-      return;
-    }
-    drawn.current = true;
-    onReady();
-  });
+  useFirstFrame(onReady);
 
   return (
     <group ref={group} position={[centreAt[0], 0, centreAt[1]]}>
