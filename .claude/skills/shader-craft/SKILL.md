@@ -26,7 +26,9 @@ Shapes that transform belong to `gpu-particles`, real places to `cinematic-foota
 | `packages/ui/src/motion/<effect>-stage.tsx`   | The effect component: composes `Stage`, sizes and frames the poster, layers copy over a veil |
 | `packages/ui/src/scene/<effect>-scene.tsx`    | The lazy scene: `StageCanvas`, the mesh, the GLSL as template strings, `useFirstFrame`       |
 | `packages/ui/src/scene/shader-chunks.ts`      | The GLSL every scene shares: hash, noise, FBM, curl, `coverUv`, the full-screen vertex       |
-| `packages/ui/tests/<effect>-scene.test.tsx`   | The shader test, written first (§8)                                                          |
+| `packages/ui/src/scene/use-scene-resource.ts` | Creates a scene's resources in the effect that disposes them (§3), shared by every scene     |
+| `packages/ui/src/scene/use-smoothed-pointer.ts` | The mouse over the canvas, smoothed on the GSAP ticker, shared by every scene              |
+| `packages/ui/tests/<effect>-*.test.tsx`       | The shader, StrictMode and layering tests, written first (§8)                                |
 | `apps/web/src/features/<feature>/…`           | Composition only: `ScrollScene`, the poster import, the copy, the choreography               |
 
 Rules, each for a reason:
@@ -35,7 +37,7 @@ Rules, each for a reason:
 - The GLSL lives in the scene file, next to the uniforms it reads: one file to read when the look changes, and the shader ships in the lazy chunk, never in the page bundle. When the file nears the 250-line lint limit, its strings move to `<effect>-shaders.ts` beside it.
 - Shared GLSL lives once, in `shader-chunks.ts`, created by the first effect of a project that needs it from `references/shader-chunks.md`; every scene interpolates from it (`${HASH}${GRADIENT_NOISE}${FBM}`). A second copy is a defect.
 - Effect components and scene primitives are covered by ADR-0024: no project ADR. A library is installed only when used, pinned in the catalog: add the version under `catalog:` in `pnpm-workspace.yaml`, then `pnpm add --filter @repo/ui <package>@catalog:`. Allowed majors: `@react-three/postprocessing` 3 with `postprocessing` 6, `@react-three/drei` 10 (helpers imported one by one).
-- Copy over an effect is passed as `children`: the effect component owns the layering (stage, veil, copy), so contrast is designed once, not per page.
+- Copy over an effect is passed as `children`: the effect component owns the layering (stage, veil, copy), so contrast is designed once, not per page. `Stage` and its scene layer are positioned, so the veil and the copy must be positioned too (`relative`) or the canvas paints over them; the veil ignores the pointer and the copy box hugs its content, so the stage's pause control in the bottom-end corner stays reachable. Keep the copy out of that corner.
 - Start from `references/effect-skeleton.md`: the stage component, the scene, the shader test and the page wiring, verified against this repo's typecheck, lint and format and run in a browser.
 
 `Stage` already loads the scene after idle near the viewport (`full`) or after the first interaction (`light`), probes WebGL2 just before mount, and falls back to the poster under reduced motion, without WebGL2, on a lost context or a failing scene.
@@ -54,10 +56,11 @@ The app passes `posterAspect` from the poster's static import (`poster.width / p
 - **`uTime`** accumulates the frame `delta`, which `StageCanvas` hands out in seconds, within ]0, 0.1]. Never `state.clock.elapsedTime` or `performance.now()`: the accumulator pauses offscreen and while paused without jumping on return, and since the first delta is always 0.1, the first frame draws at `uTime = 0.1` on every load, the frame the poster shows.
 - **`uProgress`** is the one name for scroll progress in every scene. It is copied every frame from a stable `{ value }` object that the page creates (`useState(() => ({ value: 0 }))`) and its `ScrollScene` choreography tweens (`timeline.to(progress, { value: 1, ease: "none" }, 0)`). The material does not exist when the timeline is built and the scene may never load, so the timeline never targets a uniform. `ScrollScene` already scrubs (`scrub` token); in the shader, stage phases with overlapping `smoothstep(a, b, uProgress)` windows rather than one linear ramp: overlaps read as one gesture.
 - **Late mounts.** A scene can mount mid-scroll (a phone loads it after the first interaction, which is often a scroll). It then crossfades from the poster to the current progress: that is by design, and the scrubbed timeline brings it in smoothly. Start every phase after a dead zone (`smoothstep(0.1, …)`), so the first tenth of the scroll still draws the poster's frame.
-- **`uPointer`** is a `Vector2` in canvas space (−1 to 1), smoothed by `gsap.quickTo` (same ticker, `duration.slow`, `ease.standard`) from a passive `window` `pointermove` listener: copy laid over the canvas would swallow canvas events. A finger means scroll, so only `"mouse"` pointers steer. Kill the tweens on unmount.
+- **`uPointer`** is a `Vector2` in canvas space (−1 to 1), smoothed by `gsap.quickTo` (same ticker, `duration.slow`, `ease.standard`) from a passive `window` `pointermove` listener (`use-smoothed-pointer.ts`): copy laid over the canvas would swallow canvas events. A finger means scroll, so only `"mouse"` pointers steer. Kill the tweens on unmount.
+- **Resources live in the effect that disposes them**: `useSceneResource(create, dispose, ...inputs)` returns `null` until the effect has created the resource, then the scene renders a child that draws with it and calls `useFirstFrame`. In development, StrictMode mounts, cleans up and mounts again, inside the canvas too: a material, loader, video or simulation made during render and disposed in a cleanup would stay disposed while in use (an aborted loader never loads, a disposed simulation restarts from the origin, a closed video stays black).
 - **Build the `ShaderMaterial` imperatively** with its uniforms object and pass it as `material`: React Three Fiber copies a `uniforms` prop into new objects, so later writes to yours would never reach the GPU. **Write from a module-level function** (`advance(uniforms, frame)`): the React Compiler lint rejects writing to hook values inside `useFrame`. GLSL strings are plain template literals: a `/* glsl */` tag trips `no-inline-comments`.
 - **Idle life**: with no pointer, the scene still breathes (slow drift in `uTime`, a lazy virtual pointer orbit). Idle life makes the stage ambient (§2).
-- **Tier constants** (`MAX_STEPS`, sample counts) are `defines`, never uniforms: loops need constant bounds on mobile compilers, and the driver unrolls them. Only cost changes per tier (§9).
+- **Loop bounds** (`MAX_STEPS`, sample counts) are `defines`, never uniforms: loops need constant bounds on mobile compilers, and the driver unrolls them. Only the cost knobs of §9 change per tier.
 - **Determinism**: no `Math.random()` anywhere in a scene. Seeds come from coordinates or indices, so the first frame is identical on every load, and the poster stays true.
 
 ## 4. Recipes
@@ -161,7 +164,7 @@ vec3 disperse(sampler2D source, vec2 uv, vec2 offset) {
 }
 ```
 
-**Light rays**: a radial blur toward the light, on bright pixels only, jittered per pixel so 24 samples look like 100. As a post effect it is a convolution (§5). The sample count is a cost knob: few samples plus jitter keep the same look.
+**Light rays**: a radial blur toward the light, on bright pixels only, jittered per pixel so 24 samples look like 100. As a post effect it is a convolution (§5). Pick the sample count once, for both tiers: fewer samples change the grain of the rays, and so the image.
 
 ```glsl
 vec3 rays(sampler2D source, vec2 uv, vec2 light, float decay) {
@@ -301,7 +304,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 The poster is the LCP image and the whole page under reduced motion or without WebGL2. It must be the scene's first frame, or the crossfade pops. This is the one canvas-capture recipe: `gpu-particles` and `scene-3d` use it, `cinematic-footage` owns video posters.
 
 1. Make the scene deterministic (§3): first frame at `uTime = 0.1`, pointer at rest, progress at its start, no `Math.random()`.
-2. **One poster for both tiers.** Tier knobs change only cost: pixel ratio, raymarch steps, sample counts, half-resolution passes, a particle count drawn from the same sampled set. Never image-shaping parameters (octaves, warp levels, palette, point layout): those would make the `light` first frame differ from a poster captured at `full`. If a difference is unavoidable (the brief's half-resolution bloom on `light` is the usual one), compare the two first frames side by side; if they differ visibly, capture a `light` poster too and serve it from the effect component by the same media conditions as the tier (narrow viewport or coarse pointer).
+2. **One poster for both tiers.** Tier knobs change only cost: pixel ratio, raymarch steps, half-resolution passes, a particle count drawn from the same sampled set. Never image-shaping parameters (octaves, warp levels, dispersion and ray samples, palette, point layout): those would make the `light` first frame differ from a poster captured at `full`. If a difference is unavoidable (half-resolution bloom on `light` is the usual one), compare the two first frames side by side; if they differ visibly, capture a `light` poster too and serve it from the effect component by the same media conditions as the tier (narrow viewport or coarse pointer).
 3. Install the capture script once per project from `references/capture-stage.md` (`apps/web/scripts/capture-stage.ts`, a package script so knip counts it, `scripts` in the `tsconfig` include). It fakes the page clock and steps one frame at a time until the stage turns live, so the canvas holds exactly its first frame, then screenshots the canvas alone. Run it against the local production server, never an external URL.
 4. Capture at twice the CSS pixels (the script's `deviceScaleFactor: 2`). In `cover` mode the viewport is the poster: its aspect is the `posterAspect` every other screen is cropped from, so pick the composition's reference (for example 1440×900) and keep the subject inside the area every target aspect keeps. In `poster` mode, capture at the stage's largest rendered width. Keep the PNG master in `assets/source/<feature>/<slot>/poster.png`.
 5. Encode: `avifenc --speed 4 --qcolor 60 --yuv 420 assets/source/<feature>/<slot>/poster.png apps/web/src/features/<feature>/images/<slot>-poster.avif` (`--yuv 444` for flat graphic looks, where 4:2:0 smears colour edges; a transparent canvas keeps its alpha). The static export serves images unoptimised, so the file itself must be AVIF.
@@ -315,6 +318,8 @@ The shader gets its test before its code (`references/effect-skeleton.md`, `test
 
 - Build the material with the scene's exported factory (`createEffect`), set `renderer.debug.onShaderError` to throw, render one frame per tier: a compile or link error fails the test instead of a silent blank canvas (three only logs it otherwise).
 - Read the pixels back and assert the luminance spread is above 2, the motion audit's blank threshold (ADR-0026): a shader that compiles but draws one flat colour fails too.
+- Mount the scene inside `<StrictMode>` and assert that a uniform written after the double mount still changes the pixels: it catches a resource disposed by the first cleanup.
+- Mount the effect component live and assert, with `document.elementFromPoint`, that the copy and the veil paint above the canvas and that the pause control is still the element under its own centre.
 - Logic outside GLSL (placement, token mapping, loaders) gets plain unit tests. The story renders the effect component for the design review; the e2e motion audit covers the live page.
 
 ## 9. Performance
@@ -325,11 +330,10 @@ Budgets are global: Lighthouse ≥ 0.95 on mobile and desktop for every route, a
 | -------------------------------- | ------------------------------------------- | ---------------------------- |
 | Pixel ratio (`StageCanvas`)      | `[1, 1.5]`                                  | `[1, 2]`                     |
 | Raymarch steps (`MAX_STEPS`)     | 48                                          | 96                           |
-| Dispersion, ray samples (start)  | 3, 16                                       | 6, 32                        |
 | Bloom                            | none, or no mipmap blur at half resolution  | mipmap blur                  |
 | Expensive passes                 | half-resolution target                      | full resolution              |
 | Full-screen shaders per viewport | one                                         | one                          |
-| Octaves, warp levels, palette    | the same on both tiers: they shape the image | the same                    |
+| Octaves, warp levels, dispersion and ray samples, palette | the same on both tiers: they shape the image | the same |
 
 Cost scales with pixels × work per pixel: at `full`, a 1440×900 stage is 5.2 million pixels per pass. When `light` is too slow, lower the cost knobs, then simplify the look for both tiers; never fork the look per tier. When the trace shows a long first frame, the culprit is usually shader compilation: precompile with `gl.compileAsync(scene, camera)` before the first render and cut loop sizes.
 
@@ -347,6 +351,8 @@ Write recipes from first principles, as above, or port from permissive sources w
 - Text on an effect without a contrast veil, a veil checked on one scheme only, or copy inside the canvas.
 - Tier knobs that change the image (octaves, warp levels, palette): the `light` first frame stops matching the poster.
 - A second copy of a shared GLSL function: it drifts from the first.
+- A resource created during render and disposed in an effect cleanup: StrictMode leaves it disposed in development.
+- Copy or a veil left unpositioned after the stage: the canvas paints over them.
 - Banding in dark gradients: dither the output (§4) and keep composer buffers in half float.
 - Precision loss: `sin`-based hashes, noise inputs past 10,000.
 - Overdraw: stacked transparent full-screen planes, a post pass per effect instead of merged effects.

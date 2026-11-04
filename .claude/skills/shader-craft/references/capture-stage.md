@@ -8,15 +8,19 @@ Install it once per project:
 - Add `"capture-stage": "node scripts/capture-stage.ts"` to the `scripts` of `apps/web/package.json`: knip then counts the file as an entry. Living in `apps/web`, the script resolves `@playwright/test` from the package that depends on it.
 - Add `"scripts"` to the `include` of `apps/web/tsconfig.json`, so `pnpm typecheck` covers it.
 
-Run it against the local production server only (`exec` runs in `apps/web` and passes every argument through):
+Run it against the local production server only (`exec` runs in `apps/web` and passes every argument through). The block waits for the server before capturing and stops it at the end; it runs the same under zsh and bash:
 
 ```bash
-pnpm --filter @repo/web build && pnpm --filter @repo/web start --port 3100 &
+pnpm --filter @repo/web build
+pnpm --filter @repo/web start --port 3100 &
+server=$!
+until curl -sf http://localhost:3100/ > /dev/null; do sleep 1; done
 pnpm --filter @repo/web exec node scripts/capture-stage.ts --url http://localhost:3100/<route> --stage 0 \
   --width 1440 --height 900 --output ../../assets/source/<feature>/<slot>/poster.png
 # a still plate inside a pinned ScrollScene: scroll there, then let the scrub settle in fake time
 pnpm --filter @repo/web exec node scripts/capture-stage.ts --url http://localhost:3100/<route> \
   --scroll 2400 --advance 1000 --output ../../assets/source/<feature>/<slot>/still-2.png
+kill "$server"
 ```
 
 How it works: `page.clock` fakes `requestAnimationFrame`, timers and `performance.now`, so the GSAP ticker only moves when the script steps it. The script steps one 16 ms frame at a time, with real time in between for the lazy chunk and the WebGL context, until the stage reports `data-stage="live"`: the scene has then drawn exactly one frame, its first, and stays on it. The style hides everything but the canvas and cancels the crossfade.
