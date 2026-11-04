@@ -7,13 +7,13 @@
 - Server Components by default. `"use client"` only for leaves that need it (scroll scenes, interactive widgets).
 - Data: TanStack Query. Prefetch in Server Components with `getQueryClient()` from `src/lib/query-client.ts`, pass state through `HydrationBoundary`, read with `useQuery`/`useSuspenseQuery` in client leaves.
 - Links: `ButtonLink` or `TextLink` with `render={<Link href="…" />}`. Typed routes are on.
-- Every new route goes into `e2e/support/routes.ts`; the design audit then checks it on mobile, tablet and desktop in both colour schemes.
+- Every new route goes into `e2e/support/routes.ts`; the design audit then checks it on mobile, tablet and desktop in both colour schemes. Add it to the `url` list of both `lighthouserc.json` and `lighthouserc.desktop.json` too; a test fails when they drift.
 
 ## Commands
 
 - `pnpm --filter @repo/web dev` — dev server on `:3000`.
 - `pnpm --filter @repo/web test:e2e` — needs a production build (`pnpm --filter @repo/web build`).
-- `pnpm --filter @repo/web lighthouse` — Lighthouse budgets on the production build.
+- `pnpm --filter @repo/web lighthouse` — Lighthouse budgets on the production build, mobile then desktop.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

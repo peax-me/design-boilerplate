@@ -36,7 +36,7 @@
     },
     "upload": {
       "target": "filesystem",
-      "outputDir": ".lighthouseci"
+      "outputDir": ".lighthouseci/mobile"
     }
   }
 }

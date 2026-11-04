@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "lighthouse": "lhci autorun"
+    "lighthouse": "lhci autorun && lhci autorun --config=lighthouserc.desktop.json"
   },
   "dependencies": {
     "@repo/ui": "workspace:*",
