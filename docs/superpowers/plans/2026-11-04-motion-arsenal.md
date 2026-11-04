@@ -15,7 +15,7 @@
 - Lighthouse : performance ≥ 0.95, accessibilité, bonnes pratiques et SEO = 1, sur mobile ET desktop, pour chaque route de `apps/web/e2e/support/routes.ts`.
 - Plafond Magnific : 30 000 crédits par page, exploration, brouillons et reprises compris. Magnific est le seul fournisseur payant.
 - Licences autorisées pour le code et les assets livrés : MIT, Apache-2.0, BSD, Zlib, CC0, sorties Magnific. Exclus : LYGIA, code Shadertoy sans licence permissive explicite, poids Hunyuan auto-hébergés, Apple SHARP.
-- Télémétrie coupée sur chaque MCP qui le permet : `DISABLE_TELEMETRY=true` pour Blender, `--no-usage-statistics` pour Chrome DevTools.
+- Télémétrie coupée sur chaque MCP qui le permet : `DISABLE_TELEMETRY=true` pour Blender, `--no-usage-statistics` pour Chrome DevTools, `NEXT_TELEMETRY_DISABLED=1` pour next-devtools.
 - GSAP est la seule librairie d'animation ; pas de framer-motion ni de Motion.
 - Moteur : WebGL2 par défaut. WebGPU/TSL seulement au-delà d'un million de particules.
 - Mouvement réduit ou absence de WebGL2 : poster seul, page complète, aucun `canvas`.
@@ -53,7 +53,7 @@
 
 - Produit : les numéros d'ADR cités par les tâches suivantes.
 
-- [ ] **Étape 1 : écrire les 5 ADR depuis `docs/adr/template.md`**, avec `status: proposed`, `date: 2026-11-04` et un « Supersedes / Amends » explicite là où c'est indiqué.
+- [ ] **Étape 1 : écrire les 5 ADR depuis `docs/adr/template.md`**, avec `status: proposed`, `date: 2026-11-04` et un « Supersedes » ou « Partially supersedes ADR-NNNN: <clause> » explicite là où c'est indiqué (ADR-0001 ne connaît que le remplacement).
   - **0024 Real-time rendering arsenal and licence policy.**
     - WebGL2 via R3F 9, `@react-three/postprocessing` 3.x et `postprocessing` 6.x, `@react-three/drei` 10.x (helpers importés un par un, décodeurs auto-hébergés), `@sparkjsdev/spark` 2.x.
     - Les 8 skills CloudAI-X et les skills projet `shader-craft`, `gpu-particles` et `cinematic-footage`.
@@ -63,7 +63,7 @@
     - À revoir quand R3F 10 passe en bêta.
   - **0025 Stage host with quality tiers and live WebGL on phones.**
     - Le support `Stage`, les paliers `light` et `full` et leurs déclencheurs (idle et proximité ; première interaction en plus pour `light`), la densité de pixels par palier.
-    - Amends ADR-0019 : WebGL est chargé sous `md`.
+    - Supersedes ADR-0019, dont il reprend les décisions toujours valables : WebGL est désormais chargé sous `md`.
   - **0026 Motion verification.**
     - Le contrôle du mouvement en e2e et ses seuils.
     - Lighthouse sur mobile et desktop pour chaque route.
@@ -71,7 +71,7 @@
     - Les budgets de perf sur vrai GPU.
   - **0027 Production tooling.**
     - Magnific comme seul fournisseur payant.
-    - MCP Blender (`mcp-for-blender` 2.2.7, qui corrige les CVE-2026-10661/10662/10688), avec `DISABLE_TELEMETRY=true` et `BLENDER_MCP_SAFE_MODE=1` ; Blender en ligne de commande (`blender -b -P`) pour les lots sans interface. Le module complémentaire Blender s'installe par machine (`uvx mcp-for-blender install-addon`).
+    - MCP Blender (`mcp-for-blender` 2.2.7 ; selon l'utilisateur, les CVE-2026-10661/10662/10688 sont corrigées), avec `DISABLE_TELEMETRY=true` et `BLENDER_MCP_SAFE_MODE=1` ; Blender en ligne de commande (`blender -b -P`) pour les lots sans interface. Le module complémentaire Blender s'installe par machine (`uvx mcp-for-blender@2.2.7 install-addon`).
     - ffmpeg, avifenc et cwebp ; Poly Haven (CC0) ; Brush (Apache-2.0) pour entraîner des splats.
   - **0028 Autonomous mode.**
     - Deux arrêts durs : la dépense qui ferait dépasser 30 000 crédits par page, et toute décision hors des ADR acceptés (ADR `proposed`, puis arrêt).
@@ -327,6 +327,7 @@ it("reports WebGL and shader errors only", () => {
 - [ ] **Étape 1 : mettre à jour `.mcp.json`.**
   - `playwright.args` devient `["-y", "@playwright/mcp@0.0.84", "--caps=devtools"]`.
   - Ajouter `"chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@1.12.0", "--no-usage-statistics"] }`.
+  - Ajouter `"env": { "NEXT_TELEMETRY_DISABLED": "1" }` à l'entrée `next-devtools`.
   - Ajouter `"blender": { "command": "uvx", "args": ["mcp-for-blender@2.2.7"], "env": { "DISABLE_TELEMETRY": "true", "BLENDER_MCP_SAFE_MODE": "1" } }`.
 - [ ] **Étape 2 : ajouter à `permissions.allow`** :
   - `"Bash(ffmpeg *)"`, `"Bash(ffprobe *)"`, `"Bash(avifenc *)"`, `"Bash(cwebp *)"`, `"Bash(blender -b *)"` ;
