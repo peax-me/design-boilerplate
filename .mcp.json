@@ -2,15 +2,25 @@
   "mcpServers": {
     "next-devtools": {
       "command": "npx",
-      "args": ["-y", "next-devtools-mcp@0.4.0"]
+      "args": ["-y", "next-devtools-mcp@0.4.0"],
+      "env": { "NEXT_TELEMETRY_DISABLED": "1" }
     },
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@0.0.83"]
+      "args": ["-y", "@playwright/mcp@0.0.84", "--caps=devtools"]
     },
     "magnific": {
       "type": "http",
       "url": "https://mcp.magnific.com"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@1.12.0", "--no-usage-statistics"]
+    },
+    "blender": {
+      "command": "uvx",
+      "args": ["mcp-for-blender@2.2.7"],
+      "env": { "DISABLE_TELEMETRY": "true", "BLENDER_MCP_SAFE_MODE": "1" }
     }
   }
 }

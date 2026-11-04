@@ -17,7 +17,18 @@
       "Bash(pnpm --filter * typecheck)",
       "Bash(git status)",
       "Bash(git diff*)",
-      "Bash(git log*)"
+      "Bash(git log*)",
+      "Bash(ffmpeg *)",
+      "Bash(ffprobe *)",
+      "Bash(avifenc *)",
+      "Bash(cwebp *)",
+      "Bash(blender -b *)",
+      "Bash(pnpm test:e2e*)",
+      "Bash(pnpm --filter @repo/web lighthouse)",
+      "mcp__magnific",
+      "mcp__playwright",
+      "mcp__chrome-devtools",
+      "mcp__blender"
     ],
     "deny": ["Bash(git push --force*)", "Bash(git reset --hard*)"]
   },
