@@ -7,6 +7,8 @@ description: Plan, write and build a landing or marketing page that converts, fr
 
 A landing page has one job: move one visitor to one action. Copy comes before layout, layout before motion. Work in this order and show each artefact to the user before the next step.
 
+**Autonomous run** (started by the `signature-experience` skill from a brief, ADR-0028): show nothing and wait for nothing. Record each artefact and continue, under `## Page: <name>` in `DESIGN.md`: the context lines, the message hierarchy and the section plan with its headlines. The storyboard (`### Storyboard`) and the asset list (`### Assets`) go in the same section, as their skills say. The copy itself lives in the components.
+
 ## 1. Context
 
 Read `.agents/product-marketing.md` and `PRODUCT.md`. If either is missing, run the `project-kickoff` skill, phase 1, first. Write down, in one line each: the visitor, their problem, the promised outcome, the primary action.
@@ -35,7 +37,9 @@ Rules from `docs/design/principles.md` apply: one focal point per viewport, one 
 
 Choose at most three sections to become scroll scenes with the `scroll-storytelling` skill. The rest of the page stays calm.
 
-**Gate:** the user approves copy, section plan, asset list and storyboard.
+**Gate (interactive):** the user approves copy, section plan, asset list and storyboard.
+
+**Self-check (autonomous):** before any page code, check what you recorded. Every section has one beat and one job, and each viewport one focal point and one primary action. At most three sections are scroll scenes. Every claim has proof that exists: a claim flagged `[NEED: …]` is rewritten around what is proven or removed, never invented and never a reason to stop. The asset list and the storyboard passed their own self-checks. Fix what fails, note the fix in one line, and build.
 
 ## 5. Build
 
