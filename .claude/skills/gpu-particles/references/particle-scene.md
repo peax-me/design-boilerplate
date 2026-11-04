@@ -191,7 +191,7 @@ export function createSimulation(
   Object.assign(velocity.material.uniforms, { uShapes: { value: layers }, ...uniforms });
   Object.assign(velocity.material.defines, { SHAPES: layers.image.depth, STAGGER: "0.35" });
   Object.assign(position.material.uniforms, { uDelta: uniforms.uDelta });
-  /* An error throws during render: SceneBoundary catches it and the poster stays. */
+  /* Thrown in the effect that creates the simulation (useSceneResource): SceneBoundary catches it and the poster stays. */
   const error = compute.init();
   if (error !== null) {
     throw new Error(error);
@@ -228,11 +228,7 @@ export function createPoints(grid: [number, number], tier: QualityTier, pixelRat
 type PointUniforms = ReturnType<typeof createPoints>["uniforms"];
 
 /* Everything the scene draws with, made and released together (see useSceneResource). */
-export function createParticles(
-  gl: WebGLRenderer,
-  files: unknown[],
-  tier: QualityTier,
-) {
+export function createParticles(gl: WebGLRenderer, files: unknown[], tier: QualityTier) {
   const grid = GRID[tier];
   const layers = shapeLayers(
     files.filter((file) => file instanceof ArrayBuffer),
