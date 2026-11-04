@@ -1,46 +1,34 @@
 # Particle scene
 
-Three modules that typecheck, lint and format as written in this repository, and were run in a browser (Vitest browser mode, the package's own set-up) on two sampled shapes: the first shape draws on the first frame, `progress.value = 1` morphs it into the second, a mouse over the centre parts the cloud (lit pixels in the centre fell from 2,592 to 113), and the shape heals once a finger lifts. The vanilla equivalent stayed stable for 30 frames at the 0.1 s delta cap.
+Four modules and their test, all typechecked, linted and formatted as written in this repository, and run in a browser (Vitest browser mode, the package's own set-up):
 
-Split this way because the lint caps a file at 250 lines and 10 imports: shaders, simulation, then the scene. Rename `particle` to the effect's name.
+- `tests/<effect>-morph.test.tsx` (below): at progress 0, 0.5 and 1, the farthest of 32,768 particles is exactly 0 from shapes 1, 2 and 3, whatever its seed; after the simulation holds at 0.5 for 10 s (curl off), the farthest particle is 1.1e-6 from the middle shape. With the former whole-range stagger, the same test fails: 0.397 off the middle shape.
+- The mounted scene draws the first shape on its first frame, morphs through three shapes, parts under a mouse at the centre (lit pixels there fell from 2,592 to 121) and heals once the pointer leaves the document.
+
+Shared GLSL comes from `shader-chunks.ts` (`shader-craft` `references/shader-chunks.md`): these modules import it, never copy it. Split this way because the lint caps a file at 250 lines and 10 imports, and a function at 60 lines. Rename `particle` to the effect's name.
 
 ## `packages/ui/src/scene/<effect>-shaders.ts`
 
 ```ts
-/* PCG hash (Jarzynski and Olano, JCGT 2020) and 3D value noise, as in the shader-craft recipes. */
-const NOISE = `
-  uint pcg(uint value) {
-    uint state = value * 747796405u + 2891336453u;
-    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-  }
-  float hash(ivec3 cell) {
-    return float(pcg(uint(cell.x) + pcg(uint(cell.y) + pcg(uint(cell.z))))) / 4294967295.0;
-  }
-  float valueNoise(vec3 p) {
-    ivec3 cell = ivec3(floor(p));
-    vec3 f = fract(p);
-    vec3 u = f * f * (3.0 - 2.0 * f);
-    float x00 = mix(hash(cell), hash(cell + ivec3(1, 0, 0)), u.x);
-    float x10 = mix(hash(cell + ivec3(0, 1, 0)), hash(cell + ivec3(1, 1, 0)), u.x);
-    float x01 = mix(hash(cell + ivec3(0, 0, 1)), hash(cell + ivec3(1, 0, 1)), u.x);
-    float x11 = mix(hash(cell + ivec3(0, 1, 1)), hash(cell + ivec3(1, 1, 1)), u.x);
-    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z) * 2.0 - 1.0;
-  }
-  vec3 potential(vec3 p) {
-    return vec3(valueNoise(p), valueNoise(p + vec3(31.4, 17.1, 5.9)), valueNoise(p + vec3(-11.3, 43.7, 23.2)));
-  }
-  vec3 curlNoise(vec3 p) {
-    const float e = 0.05;
-    vec3 px = potential(p + vec3(e, 0.0, 0.0)) - potential(p - vec3(e, 0.0, 0.0));
-    vec3 py = potential(p + vec3(0.0, e, 0.0)) - potential(p - vec3(0.0, e, 0.0));
-    vec3 pz = potential(p + vec3(0.0, 0.0, e)) - potential(p - vec3(0.0, 0.0, e));
-    return vec3(py.z - pz.y, pz.x - px.z, px.y - py.x) / (2.0 * e);
+import { CURL_NOISE, HASH } from "./shader-chunks.ts";
+
+/* Where a particle heads at a scroll progress. The stagger is local to each segment between two shapes,
+   so at progress k / (SHAPES - 1) every particle sits exactly on shape k: each shape can be held and read.
+   seed in 0..1 delays the particle inside the segment; blend reports how far it has gone (0 to 1). */
+export const MORPH_GOAL = `
+  vec3 morphGoal(vec2 uv, float progress, float seed, out float blend) {
+    float segment = clamp(progress, 0.0, 1.0) * float(SHAPES - 1);
+    float layer = min(floor(segment), float(SHAPES - 2));
+    float local = segment - layer;
+    blend = smoothstep(0.0, 1.0, clamp(local * (1.0 + STAGGER) - seed * STAGGER, 0.0, 1.0));
+    return mix(texture(uShapes, vec3(uv, layer)).xyz, texture(uShapes, vec3(uv, layer + 1.0)).xyz, blend);
   }
 `;
+
+/* texturePosition, textureVelocity and resolution are injected by GPUComputationRenderer. */
 export const VELOCITY = `
   uniform sampler2DArray uShapes;
-  uniform float uMorph;
+  uniform float uProgress;
   uniform float uTime;
   uniform float uDelta;
   uniform vec3 uPointer;
@@ -49,15 +37,15 @@ export const VELOCITY = `
   uniform float uStiffness;
   uniform float uDamping;
   uniform float uCurl;
-  ${NOISE}
+  ${HASH}
+  ${CURL_NOISE}
+  ${MORPH_GOAL}
   void main() {
     vec2 uv = gl_FragCoord.xy / resolution.xy;
     vec4 current = texture(texturePosition, uv);
     vec3 velocity = texture(textureVelocity, uv).xyz;
-    float stage = clamp(uMorph * (1.0 + STAGGER) - current.w * STAGGER, 0.0, 1.0) * float(SHAPES - 1);
-    float layer = min(floor(stage), float(SHAPES - 2));
-    float blend = smoothstep(0.0, 1.0, stage - layer);
-    vec3 goal = mix(texture(uShapes, vec3(uv, layer)).xyz, texture(uShapes, vec3(uv, layer + 1.0)).xyz, blend);
+    float blend;
+    vec3 goal = morphGoal(uv, uProgress, current.w, blend);
     float transit = 1.0 - abs(blend * 2.0 - 1.0);
     vec3 force = (goal - current.xyz) * uStiffness;
     force += curlNoise(current.xyz * 1.4 + vec3(0.0, 0.0, uTime * 0.15)) * uCurl * (0.15 + transit);
@@ -69,6 +57,7 @@ export const VELOCITY = `
     gl_FragColor = vec4(velocity, 1.0);
   }
 `;
+
 export const POSITION = `
   uniform float uDelta;
   void main() {
@@ -77,6 +66,7 @@ export const POSITION = `
     gl_FragColor = vec4(current.xyz + texture(textureVelocity, uv).xyz * uDelta, current.w);
   }
 `;
+
 export const POINTS_VERTEX = `
   uniform sampler2D uPositions;
   uniform float uPointSize;
@@ -87,6 +77,7 @@ export const POINTS_VERTEX = `
     gl_PointSize = uPointSize / -viewPosition.z;
   }
 `;
+
 export const POINTS_FRAGMENT = `
   void main() {
     float alpha = smoothstep(0.5, 0.1, length(gl_PointCoord - 0.5));
@@ -159,17 +150,26 @@ function startTexture(compute: GPUComputationRenderer, layers: DataArrayTexture)
   return start;
 }
 
+/* Starting values, checked stable at the 0.1 s delta cap: damping between 1.5 and 2 times √stiffness. */
+function createForces() {
+  return {
+    uProgress: { value: 0 },
+    uTime: { value: 0 },
+    uDelta: { value: 0 },
+    uPointer: { value: new Vector3() },
+    uCamera: { value: new Vector3() },
+    uPointerStrength: { value: 0 },
+    uStiffness: { value: 14 },
+    uDamping: { value: 6 },
+    uCurl: { value: 1.2 },
+  };
+}
+
 export function createSimulation(
   gl: WebGLRenderer,
   layers: DataArrayTexture,
   grid: [number, number],
 ) {
-  /* Typed objects shared with the velocity material, so the pointer hook can tween them. */
-  const pointer = {
-    uPointer: { value: new Vector3() },
-    uCamera: { value: new Vector3(0, 0, 1) },
-    uPointerStrength: { value: 0 },
-  };
   const compute = new GPUComputationRenderer(grid[0], grid[1], gl);
   if (!gl.extensions.has("EXT_color_buffer_float")) {
     compute.setDataType(HalfFloatType);
@@ -178,24 +178,17 @@ export function createSimulation(
   const position = compute.addVariable("texturePosition", POSITION, startTexture(compute, layers));
   compute.setVariableDependencies(velocity, [velocity, position]);
   compute.setVariableDependencies(position, [velocity, position]);
-  Object.assign(velocity.material.uniforms, {
-    uShapes: { value: layers },
-    uMorph: { value: 0 },
-    uTime: { value: 0 },
-    uDelta: { value: 0 },
-    ...pointer,
-    uStiffness: { value: 14 },
-    uDamping: { value: 6 },
-    uCurl: { value: 1.2 },
-  });
+  /* Typed objects the materials keep: step and the pointer hook write to them. The position pass shares uDelta. */
+  const uniforms = createForces();
+  Object.assign(velocity.material.uniforms, { uShapes: { value: layers }, ...uniforms });
   Object.assign(velocity.material.defines, { SHAPES: layers.image.depth, STAGGER: "0.35" });
-  Object.assign(position.material.uniforms, { uDelta: { value: 0 } });
+  Object.assign(position.material.uniforms, { uDelta: uniforms.uDelta });
   /* An error throws during render: SceneBoundary catches it and the poster stays. */
   const error = compute.init();
   if (error !== null) {
     throw new Error(error);
   }
-  return { compute, velocity, position, pointer };
+  return { compute, position, uniforms };
 }
 
 export type Simulation = ReturnType<typeof createSimulation>;
@@ -226,71 +219,64 @@ export function createPoints(grid: [number, number], tier: QualityTier, pixelRat
 
 type PointUniforms = ReturnType<typeof createPoints>["uniforms"];
 
-/* Mutations live outside the component: the React Compiler lint rejects writing to hook values in useFrame. */
+/* Mutations live outside the component: the React Compiler lint rejects writing to hook values in useFrame.
+   The camera is copied every frame, so the pointer ray stays right when the choreography moves the camera. */
 export function step(
   simulation: Simulation,
   points: PointUniforms,
-  frame: { delta: number; morph: number },
+  frame: { delta: number; progress: number; camera: Vector3 },
 ): void {
-  const { compute, velocity, position } = simulation;
-  const { uMorph, uTime, uDelta } = velocity.material.uniforms;
-  const { uDelta: positionDelta } = position.material.uniforms;
-  if (
-    uMorph === undefined ||
-    uTime === undefined ||
-    uDelta === undefined ||
-    positionDelta === undefined
-  ) {
-    throw new Error("Simulation uniforms are missing.");
-  }
-  uMorph.value = frame.morph;
-  uTime.value = Number(uTime.value) + frame.delta;
+  const { compute, position, uniforms } = simulation;
+  const { uProgress, uTime, uDelta, uCamera } = uniforms;
+  uProgress.value = frame.progress;
+  uTime.value += frame.delta;
   uDelta.value = frame.delta;
-  positionDelta.value = frame.delta;
+  uCamera.value.copy(frame.camera);
   compute.compute();
   const { uPositions } = points;
   uPositions.value = compute.getCurrentRenderTarget(position).texture;
 }
 ```
 
-## `packages/ui/src/scene/<effect>-scene.tsx`
+## `packages/ui/src/scene/<effect>-pointer.ts`
 
-```tsx
-"use client";
-
-import { useFrame, useLoader, useThree } from "@react-three/fiber";
+```ts
+import { useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
-import { useEffect, useState } from "react";
-import { FileLoader, Plane, Raycaster, Vector2, Vector3 } from "three";
+import { useEffect } from "react";
+import { type Camera, Plane, Raycaster, Vector2, Vector3 } from "three";
 
-import type { QualityTier } from "../lib/quality-tier.ts";
-import type { SceneProps } from "../motion/stage.tsx";
 import { duration, ease } from "../motion/tokens.ts";
-import {
-  createPoints,
-  createSimulation,
-  GRID,
-  shapeLayers,
-  type Simulation,
-  step,
-} from "./particle-simulation.ts";
-import { StageCanvas } from "./stage-canvas.tsx";
-import { useFirstFrame } from "./use-first-frame.ts";
-
-interface ParticleSceneProps extends SceneProps {
-  /* Public URLs of every shape for each tier, in morph order, built by the app with NEXT_PUBLIC_BASE_PATH. */
-  shapes: Record<QualityTier, string[]>;
-  /* Tweened from 0 to 1 by the page's ScrollScene choreography. */
-  progress: { value: number };
-}
+import type { Simulation } from "./particle-simulation.ts";
 
 const POINTER_PLANE = new Plane(new Vector3(0, 0, 1), 0);
 const POINTER_FORCE = 30;
+/* Leaving the window or the tab sends no pointermove: these release the force too. */
+const RELEASES = ["pointerup", "pointercancel", "blur"] as const;
 
-/* The pointer projected on the plane z = 0, in world units, smoothed by GSAP; the shader repels particles from the ray
-   between the camera and that point, so the pointer parts a volume as the viewer sees it. A mouse repels while it moves
-   over the canvas; a finger repels only at its contact point, until it lifts or the browser takes the gesture for a scroll. */
-function usePointerForce({ uPointer, uCamera, uPointerStrength }: Simulation["pointer"]): void {
+/* Where the pointer meets the plane z = 0, or null when it is off the canvas. */
+function pointerOnPlane(
+  event: PointerEvent,
+  canvas: HTMLCanvasElement,
+  camera: Camera,
+): Vector3 | null {
+  const box = canvas.getBoundingClientRect();
+  const inside = new Vector2(
+    ((event.clientX - box.left) / box.width) * 2 - 1,
+    1 - ((event.clientY - box.top) / box.height) * 2,
+  );
+  if (Math.abs(inside.x) > 1 || Math.abs(inside.y) > 1) {
+    return null;
+  }
+  const raycaster = new Raycaster();
+  raycaster.setFromCamera(inside, camera);
+  return raycaster.ray.intersectPlane(POINTER_PLANE, new Vector3());
+}
+
+/* The pointer projected on the plane z = 0, smoothed by GSAP; the velocity shader repels particles from the ray
+   between the camera and that point, so the pointer parts a volume as the viewer sees it. A mouse repels while it
+   moves over the canvas; a finger only at its contact point, until it lifts or the browser takes the gesture for a scroll. */
+export function usePointerForce({ uPointer, uPointerStrength }: Simulation["uniforms"]): void {
   const camera = useThree((state) => state.camera);
   const canvas = useThree((state) => state.gl.domElement);
   useEffect(() => {
@@ -298,19 +284,11 @@ function usePointerForce({ uPointer, uCamera, uPointerStrength }: Simulation["po
     const toX = gsap.quickTo(uPointer.value, "x", smooth);
     const toY = gsap.quickTo(uPointer.value, "y", smooth);
     const toStrength = gsap.quickTo(uPointerStrength, "value", smooth);
-    const raycaster = new Raycaster();
-    const hit = new Vector3();
     const listening = new AbortController();
+    const options = { passive: true, signal: listening.signal };
     function press(event: PointerEvent): void {
-      const box = canvas.getBoundingClientRect();
-      const inside = new Vector2(
-        ((event.clientX - box.left) / box.width) * 2 - 1,
-        1 - ((event.clientY - box.top) / box.height) * 2,
-      );
-      raycaster.setFromCamera(inside, camera);
-      uCamera.value.copy(camera.position);
-      const onPlane = Math.abs(inside.x) <= 1 && Math.abs(inside.y) <= 1;
-      if (!onPlane || raycaster.ray.intersectPlane(POINTER_PLANE, hit) === null) {
+      const hit = pointerOnPlane(event, canvas, camera);
+      if (hit === null) {
         toStrength(0);
         return;
       }
@@ -321,7 +299,6 @@ function usePointerForce({ uPointer, uCamera, uPointerStrength }: Simulation["po
     function release(): void {
       toStrength(0);
     }
-    const options = { passive: true, signal: listening.signal };
     window.addEventListener(
       "pointermove",
       (event) => {
@@ -340,14 +317,39 @@ function usePointerForce({ uPointer, uCamera, uPointerStrength }: Simulation["po
       },
       options,
     );
-    for (const type of ["pointerup", "pointercancel"]) {
+    for (const type of RELEASES) {
       window.addEventListener(type, release, options);
     }
+    document.documentElement.addEventListener("pointerleave", release, options);
     return () => {
       listening.abort();
       gsap.killTweensOf([uPointer.value, uPointerStrength]);
     };
-  }, [camera, canvas, uPointer, uCamera, uPointerStrength]);
+  }, [camera, canvas, uPointer, uPointerStrength]);
+}
+```
+
+## `packages/ui/src/scene/<effect>-scene.tsx`
+
+```tsx
+"use client";
+
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { useEffect, useState } from "react";
+import { FileLoader, Vector3 } from "three";
+
+import type { QualityTier } from "../lib/quality-tier.ts";
+import type { SceneProps } from "../motion/stage.tsx";
+import { usePointerForce } from "./particle-pointer.ts";
+import { createPoints, createSimulation, GRID, shapeLayers, step } from "./particle-simulation.ts";
+import { StageCanvas } from "./stage-canvas.tsx";
+import { useFirstFrame } from "./use-first-frame.ts";
+
+interface ParticleSceneProps extends SceneProps {
+  /* Public URLs of every shape for each tier, in morph order, built by the app with NEXT_PUBLIC_BASE_PATH. */
+  shapes: Record<QualityTier, string[]>;
+  /* Tweened from 0 to 1 by the page's ScrollScene choreography. */
+  progress: { value: number };
 }
 
 function Particles({ tier, onReady, shapes, progress }: ParticleSceneProps) {
@@ -376,10 +378,14 @@ function Particles({ tier, onReady, shapes, progress }: ParticleSceneProps) {
     },
     [simulation, points],
   );
-  usePointerForce(simulation.pointer);
+  usePointerForce(simulation.uniforms);
   useFirstFrame(onReady);
-  useFrame((_, delta) => {
-    step(simulation, points.uniforms, { delta, morph: progress.value });
+  useFrame((state, delta) => {
+    step(simulation, points.uniforms, {
+      delta,
+      progress: progress.value,
+      camera: state.camera.position,
+    });
   });
   return <points geometry={points.geometry} material={points.material} frustumCulled={false} />;
 }
@@ -393,10 +399,154 @@ export function ParticleScene(props: ParticleSceneProps) {
 }
 ```
 
+## `packages/ui/tests/<effect>-morph.test.tsx`
+
+Write it before `MORPH_GOAL`: the first case renders the goal of every particle into a float target with `GPUComputationRenderer`'s own helpers and compares it with each shape; the second runs the real simulation with the curl off and measures how far the particles end from the middle shape.
+
+```tsx
+import {
+  ClampToEdgeWrapping,
+  DataTexture,
+  FloatType,
+  NearestFilter,
+  RGBAFormat,
+  type WebGLRenderTarget,
+  WebGLRenderer,
+} from "three";
+import { GPUComputationRenderer } from "three/addons/misc/GPUComputationRenderer.js";
+import { describe, expect, it } from "vitest";
+
+import { MORPH_GOAL } from "../src/scene/particle-shaders.ts";
+import {
+  createPoints,
+  createSimulation,
+  shapeLayers,
+  step,
+} from "../src/scene/particle-simulation.ts";
+
+const GRID: [number, number] = [256, 128];
+const COUNT = GRID[0] * GRID[1];
+const SHAPES = 3;
+const STAGGER = 0.35;
+const FRAME = 1 / 60;
+const SETTLE_FRAMES = 600;
+
+/* Three unlike shapes in the shared frame: a sphere, a flat disc and a vertical line. */
+function shapeBuffer(shape: number): ArrayBuffer {
+  const points = new Float32Array(COUNT * 3);
+  for (let index = 0; index < COUNT; index += 1) {
+    const t = (index + 0.5) / COUNT;
+    const angle = index * 2.399963;
+    const ring = Math.sqrt(1 - (1 - 2 * t) ** 2);
+    const shapes = [
+      [Math.cos(angle) * ring, 1 - 2 * t, Math.sin(angle) * ring],
+      [Math.cos(angle) * Math.sqrt(t), 0, Math.sin(angle) * Math.sqrt(t)],
+      [0, 2 * t - 1, 0],
+    ];
+    points.set(shapes[shape] ?? [], index * 3);
+  }
+  return points.buffer;
+}
+
+function readTarget(renderer: WebGLRenderer, target: WebGLRenderTarget): Float32Array {
+  const pixels = new Float32Array(COUNT * 4);
+  renderer.readRenderTargetPixels(target, 0, 0, GRID[0], GRID[1], pixels);
+  return pixels;
+}
+
+/* The largest distance between each particle and its point on one shape layer. */
+function farthestFrom(layer: Float32Array, positions: Float32Array): number {
+  let farthest = 0;
+  for (let index = 0; index < COUNT; index += 1) {
+    const dx = (positions[index * 4] ?? 0) - (layer[index * 3] ?? 0);
+    const dy = (positions[index * 4 + 1] ?? 0) - (layer[index * 3 + 1] ?? 0);
+    const dz = (positions[index * 4 + 2] ?? 0) - (layer[index * 3 + 2] ?? 0);
+    farthest = Math.max(farthest, Math.hypot(dx, dy, dz));
+  }
+  return farthest;
+}
+
+const buffers = [shapeBuffer(0), shapeBuffer(1), shapeBuffer(2)];
+const [sphere, disc, line] = [
+  new Float32Array(shapeBuffer(0)),
+  new Float32Array(shapeBuffer(1)),
+  new Float32Array(shapeBuffer(2)),
+];
+
+describe("three-shape morph", () => {
+  it("puts every particle exactly on shape k at progress k / 2, whatever its seed", () => {
+    const renderer = new WebGLRenderer();
+    const compute = new GPUComputationRenderer(GRID[0], GRID[1], renderer);
+    const seeds = new DataTexture(
+      new Float32Array(COUNT * 4),
+      GRID[0],
+      GRID[1],
+      RGBAFormat,
+      FloatType,
+    );
+    for (let index = 0; index < COUNT; index += 1) {
+      seeds.image.data?.set([0, 0, 0, index / (COUNT - 1)], index * 4);
+    }
+    seeds.needsUpdate = true;
+    const material = compute.createShaderMaterial(
+      `uniform sampler2DArray uShapes; uniform sampler2D uSeeds; uniform float uProgress; ${MORPH_GOAL}
+       void main() {
+         vec2 uv = gl_FragCoord.xy / resolution.xy;
+         float blend;
+         gl_FragColor = vec4(morphGoal(uv, uProgress, texture(uSeeds, uv).w, blend), 1.0);
+       }`,
+      {
+        uShapes: { value: shapeLayers(buffers, GRID) },
+        uSeeds: { value: seeds },
+        uProgress: { value: 0 },
+      },
+    );
+    Object.assign(material.defines, { SHAPES, STAGGER: String(STAGGER) });
+    const target = compute.createRenderTarget(
+      GRID[0],
+      GRID[1],
+      ClampToEdgeWrapping,
+      ClampToEdgeWrapping,
+      NearestFilter,
+      NearestFilter,
+    );
+    const holds: Array<[number, Float32Array]> = [
+      [0, sphere],
+      [0.5, disc],
+      [1, line],
+    ];
+    const misses = holds.map(([progress, layer]) => {
+      material.uniforms["uProgress"] = { value: progress };
+      compute.doRenderTarget(material, target);
+      return farthestFrom(layer, readTarget(renderer, target));
+    });
+
+    expect(misses).toEqual([0, 0, 0]);
+  });
+
+  it("settles every particle on the middle shape when the scroll holds at 0.5", () => {
+    const renderer = new WebGLRenderer();
+    const simulation = createSimulation(renderer, shapeLayers(buffers, GRID), GRID);
+    simulation.uniforms.uCurl.value = 0;
+    const points = createPoints(GRID, "light", 1);
+    const camera = simulation.uniforms.uCamera.value.set(0, 0, 4.5).clone();
+    for (let frame = 0; frame < SETTLE_FRAMES; frame += 1) {
+      step(simulation, points.uniforms, { delta: FRAME, progress: 0.5, camera });
+    }
+    const settled = farthestFrom(
+      disc,
+      readTarget(renderer, simulation.compute.getCurrentRenderTarget(simulation.position)),
+    );
+
+    expect(settled).toBeLessThan(1e-3);
+  });
+});
+```
+
 Why it is shaped this way:
 
-- Materials are built imperatively (`new ShaderMaterial({ uniforms })`): React Three Fiber 9 copies a `uniforms` prop into new objects, so writes to yours would never reach the GPU. The same holds for the typed `pointer` uniforms shared with the velocity material.
-- Uniform writes happen in module-level functions (`step`): the React Compiler lint rejects writing to hook values inside `useFrame`.
+- Materials are built imperatively (`new ShaderMaterial({ uniforms })`), and the simulation's uniforms are typed objects the materials keep: React Three Fiber 9 copies a `uniforms` prop into new objects, so writes to yours would never reach the GPU.
+- Uniform writes happen in module-level functions (`step`): the React Compiler lint rejects writing to hook values inside `useFrame`. `step` copies the camera position every frame, so the pointer ray stays right when the choreography moves the camera.
 - `createSimulation` runs during render: a missing float extension or a failed `init()` throws there, `SceneBoundary` catches it and the poster stays.
 - `useLoader(FileLoader, …)` suspends until the shapes arrive; the stage keeps its poster meanwhile.
-- The effect component composes `Stage` like any effect (`shader-craft` `references/effect-skeleton.md`) and passes `shapes` (URLs per tier, built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`) and `progress` to this scene.
+- The effect component composes `Stage` like any effect (`shader-craft` `references/effect-skeleton.md`, `ambient` because the shape breathes at rest) and passes `shapes` (URLs per tier, built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`) and `progress` to this scene.

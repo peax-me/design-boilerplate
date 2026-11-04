@@ -1,6 +1,11 @@
 # Shape sampling script
 
-The offline sampler of `SKILL.md` §3. It typechecks, lints and formats as written in this repository, and was run on a textured, nested, two-mesh GLB: it wrote 32,768 and 131,072 points per shape (384 KiB and 1.5 MiB), centred, longest half-extent 1, sorted by height.
+The offline sampler of `SKILL.md` §3. It typechecks, lints and formats as written in this repository, and was run on test models:
+
+- A textured, nested, multi-mesh GLB loads (Node has no image decoder: the `skip-textures` plugin hands back empty textures).
+- A model whose floor slab dwarfs a machine put 4.9 % of the points on the machine; `--weight floor=0.1` raised it to 32.7 %.
+- The 32,768-point file is exactly the first 32,768 points of the 131,072-point file, with the same distribution (machine share and radius quantiles identical to three decimals).
+- An unknown `--sort` key stops with the usage line.
 
 Install it once per project, in `@repo/ui` because `three` lives there (ADR-0025):
 
@@ -8,15 +13,18 @@ Install it once per project, in `@repo/ui` because `three` lives there (ADR-0025
 - Add `"sample-shapes": "node scripts/sample-shapes.ts"` to the `scripts` of `packages/ui/package.json`: knip then counts it as an entry.
 - Add `"scripts"` to the `include` of `packages/ui/tsconfig.json`, so `pnpm typecheck` covers it.
 
-Run it on the source models, never the optimised ones (`exec` runs in `packages/ui` and passes every argument through):
+Run it on the source models of one stage together, never on optimised GLBs (`exec` runs in `packages/ui` and passes every argument through):
 
 ```bash
 mkdir -p apps/web/public/media/<feature>
 pnpm --filter @repo/ui exec node scripts/sample-shapes.ts --out ../../apps/web/public/media/<feature> \
-  ../../assets/3d/source/<first-shape>.glb ../../assets/3d/source/<second-shape>.glb
+  --sort height --weight <mesh name>=0.2 \
+  ../../assets/3d/source/<first-shape>.glb ../../assets/3d/source/<second-shape>.glb ../../assets/3d/source/<third-shape>.glb
 ```
 
-Sampling is random: after a re-run, re-capture the poster (`shader-craft` §7).
+- `--sort` is shared by every shape of the stage: `height` by default; `radius` (distance from the centre) as soon as one shape is flat along the vertical axis, where heights tie; `angle` (around the vertical axis) for rings and wheels.
+- `--weight <mesh name>=<factor>` multiplies the area of the named mesh (the glTF node name): below 1 for a slab or a backdrop that would swallow the points, above 1 for a small part the story is about. Repeat it per mesh.
+- Sampling is random: after a re-run, re-capture the poster (`shader-craft` §7).
 
 ```ts
 import { readFile, writeFile } from "node:fs/promises";
@@ -28,8 +36,19 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshSurfaceSampler } from "three/addons/math/MeshSurfaceSampler.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-/* The two particle counts of the quality tiers (256×128 and 512×256 textures). */
-const COUNTS = [32_768, 131_072];
+/* 131,072 points (2^17) for the full tier; the light tier draws the first 32,768 (2^15) of the same order. */
+const FULL_BITS = 17;
+const LIGHT_COUNT = 32_768;
+
+/* One key for every shape of a stage, so particle i keeps its rank from shape to shape. */
+const SORT_KEYS = {
+  height: (point: Vector3) => point.y,
+  radius: (point: Vector3) => point.length(),
+  angle: (point: Vector3) => Math.atan2(point.z, point.x),
+} as const;
+
+type SortKey = keyof typeof SORT_KEYS;
+
 /* Node has no image decoder, and only the surface matters: every texture is an empty placeholder. */
 function skipTextures() {
   return { name: "skip-textures", loadTexture: () => Promise.resolve(new Texture()) };
@@ -39,8 +58,13 @@ function isMesh(object: Object3D): object is Mesh {
   return object instanceof Mesh;
 }
 
-/* World-space float positions, whatever the source layout (interleaved, quantised, nested transforms). */
-function worldGeometry(mesh: Mesh): BufferGeometry {
+function isSortKey(value: string): value is SortKey {
+  return Object.hasOwn(SORT_KEYS, value);
+}
+
+/* World-space float positions, whatever the source layout (interleaved, quantised, nested transforms),
+   and a weight per vertex: the sampler multiplies each face's area by it. */
+function worldGeometry(mesh: Mesh, weight: number): BufferGeometry {
   const source = mesh.geometry.getAttribute("position");
   const positions = new Float32Array(source.count * 3);
   const point = new Vector3();
@@ -50,7 +74,9 @@ function worldGeometry(mesh: Mesh): BufferGeometry {
       .applyMatrix4(mesh.matrixWorld)
       .toArray(positions, index * 3);
   }
-  const geometry = new BufferGeometry().setAttribute("position", new BufferAttribute(positions, 3));
+  const geometry = new BufferGeometry()
+    .setAttribute("position", new BufferAttribute(positions, 3))
+    .setAttribute("weight", new BufferAttribute(new Float32Array(source.count).fill(weight), 1));
   geometry.setIndex(mesh.geometry.getIndex());
   return geometry.index === null ? geometry : geometry.toNonIndexed();
 }
@@ -69,7 +95,7 @@ function normalise(geometry: BufferGeometry): Mesh {
   return new Mesh(geometry);
 }
 
-async function readSurface(path: string): Promise<Mesh> {
+async function readSurface(path: string, weights: Map<string, number>): Promise<Mesh> {
   const file = await readFile(path);
   const loader = new GLTFLoader().register(skipTextures);
   const gltf = await loader.parseAsync(
@@ -80,47 +106,70 @@ async function readSurface(path: string): Promise<Mesh> {
   const parts: BufferGeometry[] = [];
   gltf.scene.traverse((object) => {
     if (isMesh(object)) {
-      parts.push(worldGeometry(object));
+      parts.push(worldGeometry(object, weights.get(object.name) ?? 1));
     }
   });
   return normalise(mergeGeometries(parts));
 }
 
-/* Every shape is sorted by height: particle i keeps its rank across shapes, so a morph flows instead of swarming. */
-function samplePoints(surface: Mesh, count: number): Float32Array {
-  const sampler = new MeshSurfaceSampler(surface).build();
+function bitReverse(value: number, bits: number): number {
+  let reversed = 0;
+  for (let bit = 0; bit < bits; bit += 1) {
+    reversed = (reversed << 1) | ((value >> bit) & 1);
+  }
+  return reversed;
+}
+
+/* Sorted by the shared key, then stored in bit-reversed rank order: any power-of-two prefix (the light tier's
+   32,768) is an even sample of the whole shape, and particle i has the same rank in every shape. */
+function samplePoints(surface: Mesh, sortKey: SortKey): Float32Array {
+  const count = 2 ** FULL_BITS;
+  const sampler = new MeshSurfaceSampler(surface).setWeightAttribute("weight").build();
   const points = Array.from({ length: count }, () => {
     const point = new Vector3();
     sampler.sample(point);
     return point;
   });
-  points.sort((first, second) => first.y - second.y);
+  const key = SORT_KEYS[sortKey];
+  points.sort((first, second) => key(first) - key(second));
   const data = new Float32Array(count * 3);
-  for (const [index, point] of points.entries()) {
-    point.toArray(data, index * 3);
+  for (let index = 0; index < count; index += 1) {
+    points[bitReverse(index, FULL_BITS)]?.toArray(data, index * 3);
   }
   return data;
 }
 
+function readWeights(entries: string[]): Map<string, number> {
+  return new Map(
+    entries.map((entry) => {
+      const [name = "", factor = "1"] = entry.split("=");
+      return [name, Number(factor)];
+    }),
+  );
+}
+
 async function sampleShapes(): Promise<void> {
   const { values, positionals } = parseArgs({
-    options: { out: { type: "string" } },
+    options: {
+      out: { type: "string" },
+      sort: { type: "string", default: "height" },
+      weight: { type: "string", multiple: true, default: [] },
+    },
     allowPositionals: true,
   });
-  if (values.out === undefined || positionals.length === 0) {
-    throw new Error("Usage: sample-shapes --out <apps/web/public/media/feature> <model.glb>…");
+  const { out, sort } = values;
+  if (out === undefined || !isSortKey(sort) || positionals.length === 0) {
+    throw new Error(
+      "Usage: sample-shapes --out <dir> [--sort height|radius|angle] [--weight <mesh>=<factor>]… <model.glb>…",
+    );
   }
-  const outDirectory = values.out;
+  const weights = readWeights(values.weight);
   await Promise.all(
     positionals.map(async (model) => {
-      const surface = await readSurface(model);
+      const points = samplePoints(await readSurface(model, weights), sort);
       const name = basename(model, ".glb");
-      await Promise.all(
-        COUNTS.map(async (count) => {
-          const points = samplePoints(surface, count);
-          await writeFile(join(outDirectory, `${name}-${count}.bin`), points);
-        }),
-      );
+      await writeFile(join(out, `${name}-131072.bin`), points);
+      await writeFile(join(out, `${name}-32768.bin`), points.subarray(0, LIGHT_COUNT * 3));
     }),
   );
 }
@@ -130,6 +179,6 @@ await sampleShapes();
 
 Why it is shaped this way:
 
-- Node has no image decoder: without the `skip-textures` plugin, `GLTFLoader` fails on any textured model (`self is not defined`). The plugin hands back empty textures; only the surface is sampled.
-- Positions are read through `fromBufferAttribute` and the world matrix, so interleaved, quantised and nested meshes all land in one frame, and every mesh of the model is merged before sampling (area-weighted across meshes).
-- Each count is sampled on its own, so the light file is a uniform sample, not the first quarter of a sorted list.
+- Every mesh is moved into world space through `fromBufferAttribute` and its world matrix, so interleaved, quantised and nested meshes land in one frame, then merged so the sample is area-weighted across meshes.
+- The points are sorted by the shared key, then stored in bit-reversed rank order: index `i` has the same rank in every shape (morphs flow), and any power-of-two prefix is an even sample of the whole shape, so the `light` tier draws the first 32,768 points of the same set the `full` tier draws.
+- `setRandomGenerator` exists at runtime but not in `@types/three` 0.186, so sampling is not seeded; the committed `.bin` files are the stable artefact.
