@@ -24,7 +24,7 @@ Footage earns its place when the story needs a real place or a real object in th
 | An atmosphere behind copy                         | A seamless loop: a plain video loop component, or an ambient stage when it needs WebGL    |
 | A still that should breathe                       | 2.5D relief from a depth map (§6), no video at all                                        |
 
-**Two routes for a loop.** A loop that only plays is a plain video: the loop component of `asset-production` (MP4 and WebM, its poster, `muted`, `playsInline`, its own pause control, the poster alone under reduced motion) owns it, and this skill only generates and encodes it (§2, §3). A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built here, with frames drawn as textures and `Stage`'s pause control. Task 13 aligns `asset-production` with this split.
+**Two routes for a loop.** A loop that only plays is a plain video: the loop component of `asset-production` (MP4 and WebM, its poster, `muted`, `playsInline`, its own pause control, the poster alone under reduced motion) owns it, and this skill only generates and encodes it (§2, §3). A loop that needs a WebGL treatment (a dissolve into another shot, a shader grade, a pointer response) is an `ambient` stage built here, with frames drawn as textures and `Stage`'s pause control. `asset-production` owns plain loops.
 
 Avoid footage for anything a visitor must read or trust as real evidence: product UI comes from real screenshots, people presented as customers are never generated (`asset-production`).
 
@@ -80,7 +80,7 @@ A draft's last frame is softer than the final's: chaining from a draft starts th
 **Budget.** 30,000 credits per page, exploration, drafts and retries included; Magnific is the only paid provider.
 
 - Price the whole plan before the first call: `simulate_cost` with the exact arguments of every keyframe, draft and final, plus one retry per final shot. `video_finalize_draft` is not in `simulate_cost`: count it at the price of the equivalent `video_generate` at final resolution, an upper bound. If the plan does not fit, shorten shots, use fewer shots, or carry a beat with 2.5D relief (§6) instead of video.
-- `simulate_cost` again before each paid call (arguments drift). After a finalize, read `account_balance` and record what it really cost.
+- `simulate_cost` again before each paid call (arguments drift). `account_balance` keeps no history: read it right before and right after `video_finalize_draft`, and record the difference as its real cost.
 - Record every paid call and its credits in `assets/provenance.json` with the page's running total (`asset-production` owns the format).
 - Approval follows `asset-production`: an interactive session works from the quote the user approved; an autonomous run proceeds while the page stays under 30,000 credits and stops before a call that would pass it (ADR-0028).
 - Download every result at once (`creations_register_download`, then save): result URLs expire.
@@ -110,7 +110,7 @@ rate=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -o
 # count frames from the first to the last source frame, both included: the seams and the poster need the true ends
 # (a hair under the exact rate, so float rounding never pushes the last frame out of the last slot)
 step=$(awk -v n="$count" -v d="$duration" -v r="$rate" -v s="$skip" 'BEGIN { split(r, q, "/"); f = q[2] / q[1]; print 0.9999 * (n - 1) / (d - (s + 1) * f) }')
-sample="trim=start_frame=$skip,setpts=PTS-STARTPTS,fps=$step:round=up"
+sample="trim=start_frame=${skip},setpts=PTS-STARTPTS,fps=${step}:round=up"
 mkdir -p "$frames/landscape" "$frames/portrait" "$out/portrait"
 ffmpeg -i "$master" -an -vf "$sample,scale=1600:-2:flags=lanczos" -frames:v $count "$frames/landscape/%04d.png"
 ffmpeg -i "$master" -an -vf "$sample,scale=-2:900:flags=lanczos,crop=506:900" -frames:v $count "$frames/portrait/%04d.png"
@@ -133,7 +133,7 @@ rm -f "$out/0001.avif"                                 # the scene loads frame 1
 avifenc --speed 6 --qcolor 65 --yuv 420 --depth 8 "$frames/portrait/0001.png" "$out/portrait/0001.avif"
 ```
 
-The app imports it statically, passes it as the stage's `poster` (`fill`, `loading="eager"`, `fetchPriority="high"`), and puts `poster.src` first in the landscape frame list: the desktop scene loads frame 1 from the poster's own URL, one download for both. Because the portrait frames are a centred crop at the same height, the same poster, framed with `object-fit: cover`, matches the portrait first frame too. The static export serves images unoptimised, so the poster is AVIF itself.
+The app imports it statically, passes it as the stage's `poster` (`fill`, `loading="eager"`, `fetchPriority="high"`), and puts `poster.src` first in the landscape frame list: the desktop scene loads frame 1 from the poster's own URL, one download for both. Because the portrait frames are a centred crop at the same height, the same poster, framed with `object-fit: cover`, matches the portrait first frame too, in the boxes that use those frames (§4). The static export serves images unoptimised, so the poster is AVIF itself.
 
 **Still plates** for reduced motion: one per beat, from the frame that tells it (a hold, an arrival), and always the destination, the last frame of the last shot, so the journey reads to its end without motion. Encode them from the kept PNGs like the poster (`--qcolor 65`) into `apps/web/src/features/<feature>/images/<slot>-still-<beat>.avif`, and pass them to `ScrollScene still`.
 
@@ -169,7 +169,7 @@ best=$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^All:/) { split($i, value, ":"
 # then encode shot B again from there: set skip=$((best - 1)) in the block above
 ```
 
-On test clips, a seam of 0.88 rose to 0.98 after trimming shot B to its best frame. For a loop, the same log against `first.png`, read from its last 30 lines (`tail -n 30`), gives the cut point (`-frames:v`). When no frame reaches 0.95, the noise dissolve between shots hides the seam (place it over the seam), or shot B is generated again from the finalized last frame.
+Measured on test clips: a chained seam of 0.929 between two 1080p shots rose to 0.970 after `skip=2` (compared at 1600 px; 0.991 at the source size), and a 640×360 pair went from 0.88 to 0.98. For a loop, the same log against `first.png`, read from its last 30 lines (`tail -n 30`), gives the cut point (`-frames:v`). When no frame reaches 0.95, the noise dissolve between shots hides the seam (place it over the seam), or shot B is generated again from the finalized last frame.
 
 **Files.** Masters (MP4s, keyframes, extracted seam stills, depth maps, masks) in `assets/source/<feature>/<shot>/`, never shipped. Provenance: one entry per sequence (its folder, frame count and encoding command), pointing at its master and every Magnific creation behind it.
 
@@ -180,7 +180,9 @@ On test clips, a seam of 0.88 rose to 0.98 after trimming shot B to its best fra
 - **One queue per stage**, at most six requests in flight, `priority: "low"`: every shot's coarse frames first (every 8th and each shot's last, so the whole scrub works early), then the missing frame closest to the playhead, picked again at each request so the order follows the visitor. A missing frame shows its nearest loaded neighbour in the same shot.
 - **One decoded-frame cap per stage**: keep frames compressed in memory and decode them on demand with `createImageBitmap` (off the main thread); about eight decoded frames stay, the farthest from the playhead closing first. A decoded 1600×900 frame weighs 5.8 MB.
 - **The next shot is prepared**: from the middle of a shot, the next shot's first frame is decoded and uploaded to the second texture, and the dissolve waits at 0 until it is there: never black, never a stale frame.
-- **The crop follows the stage's box** when the scene mounts (portrait when it is taller than wide), not the window or the quality tier: a landscape tablet is `light` but wide, and a stage need not fill the window.
+- **The crop follows the stage's box** when the scene mounts, not the window or the quality tier: the portrait frames only when the box is at most 506/900 as wide as it is tall, where their crop is exactly the poster's cover crop. A tablet held upright (0.75) or a 4:5 stage would zoom the portrait crop 1.33 times and upscale it, so those boxes use the landscape frames, cropped like the poster.
+- **A frame that fails is dropped for good**: a non-OK response is never stored and a blob that does not decode is discarded, so neither is asked or decoded again, and the nearest neighbour in the shot stands in.
+- **Every resource lives in the effect that disposes it** (`useSceneResource`, `shader-craft` §3): the store, its textures and the clip. Created during render, StrictMode's first cleanup would abort the store or close the clip in development, and the scene would stay on one frame or black.
 - URLs are built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`.
 
 ## 5. Render
@@ -190,15 +192,16 @@ Start from `references/footage-scene.md`: the frame store, the dissolve shader, 
 - **Frames are textures.** Decode with `imageOrientation: "flipY"` and set `flipY: false` on the texture (three's flip does nothing on an `ImageBitmap`), `colorSpace: SRGBColorSpace`, `LinearFilter`, no mipmaps; upload only when the frame index changes.
 - **The scroll places the playhead**: each shot owns an equal part of the progress, and the end of each part but the last dissolves into the next shot.
 - **Dissolves are noise thresholds**, not crossfades (`DISSOLVE_FRAGMENT` in the reference): an FBM field over the frame, a threshold that sweeps from below 0 to 1 with the dissolve, a soft edge where the next shot burns through, the two shots refracted along the field's slope at that edge, and the seam lit slightly brighter. Tint the seam with a token colour when the brand has one that suits light. The frame is mapped with `coverUv`, so the canvas crops exactly like the poster.
-- **Beyond 150 frames**, the all-intra clip plays through a `VideoTexture` on a muted, inline, `preload="auto"` video that never plays: the scroll seeks it. The scene suspends on `use(loadClip(url))` until `loadeddata` (first frame decoded, duration known), seeks are coalesced (one at a time, always to the latest target), the texture updates on `seeked`, and the video and texture are released on unmount. On iOS Safari a muted inline video may show no frame until it has played once: check on a real device, and if so, `play()` it and pause it on `playing` before the first seek.
+- **Beyond 150 frames**, the all-intra clip plays through a `VideoTexture` on a muted, inline, `preload="auto"` video: the scroll seeks it. `openClip` and `closeClip` go through `useSceneResource`; a child component suspends on `use(clip.ready)` until `loadeddata` (first frame decoded, duration known); seeks are coalesced (one at a time, always to the latest target); the texture updates on `seeked`; the video and texture are released on unmount. iOS Safari may load nothing until a video plays, so `openClip` starts it muted and puts it back, paused, on its first frame as soon as it plays; if `play()` is refused and no data comes, `ready` never resolves and the poster stays. Check it on a real device.
 - **Ambient or not**: a scroll-driven stage rests when the visitor rests, so it is not `ambient`. A WebGL loop moves on its own: mark it `ambient` and `Stage` gives it its pause control once live; the motion audit then also fails it if it freezes.
-- **Late mounts**: a phone loads the scene after its first interaction, often a scroll, so it may mount mid-journey and crossfade from the poster to the current frame, by design. Hold the first shot's opening frames on the first tenth of the scroll so the common case stays on the poster's frame.
+- **Late mounts**: a phone loads the scene after its first interaction, often a scroll, so it may mount mid-journey and crossfade from the poster to the current frame, by design. `place` holds the first frame through its dead zone, the first tenth of the scroll, so the common case stays on the poster's frame.
 
 **Tests first**, in the package's Vitest browser mode, before the scene:
 
-- `place`: progress 0 is the first shot's first frame, the end of each shot but the last dissolves, progress 1 is the last frame of the last shot.
-- The store: at most six requests in flight, coarse frames first, decoded bitmaps capped (count `createImageBitmap` and `close` calls).
-- The mounted scene: the first frame draws upright; with decoding slowed, a jump into a dissolve shows no black pixel and none of the next shot until its first frame is on the texture.
+- `place`: the dead zone holds the first frame, the end of each shot but the last dissolves, progress 1 is the last frame of the last shot.
+- The store: at most six requests in flight, coarse frames first, decoded bitmaps capped (count `createImageBitmap` and `close` calls); a 404 asked once, a broken frame decoded once, a neighbour shown instead of black.
+- The mounted scene, inside `<StrictMode>` and with network latency: frames keep loading to the last shot. With decoding slowed, a jump into a dissolve shows no black pixel and none of the next shot until its first frame is on the texture.
+- The clip, inside `<StrictMode>`: its first frame draws and a seek changes the picture (`references/footage-scene.md` has these tests).
 - The dissolve shader: the compile and blank-frame test of `shader-craft` §8.
 
 ## 6. Relief 2.5D
@@ -219,13 +222,14 @@ cwebp -q 85 -alpha_q 100 -exact subject.png -o subject.webp
 ffmpeg -i depth.png -vf "format=gray,gblur=sigma=2" depth-soft.png && cwebp -lossless -exact depth-soft.png -o depth.webp
 ```
 
-4. **Shift each layer by its depth**, at most 3 % of the width on each axis whatever the focus depth: `uParallax` is the smoothed pointer (mouse only, `gsap.quickTo`) or the scroll, within [−1, 1]; `uFocus` is the depth that stays still.
+4. **Shift each layer by its depth**, at most 3 % of the width in any direction (a diagonal pointer included), whatever the focus depth: `uParallax` is the smoothed pointer (mouse only, `gsap.quickTo`) or the scroll, within [−1, 1]; `uFocus` is the depth that stays still.
 
 ```glsl
 vec2 parallax(sampler2D depthMap, vec2 uv, vec2 direction) {
   float depth = texture(depthMap, uv).r;                       // near = 1, far = 0
   float reach = max(uFocus, 1.0 - uFocus);                     // the largest |depth - focus| possible
-  return uv + direction * (depth - uFocus) * (0.03 / reach);   // never more than 0.03 of the width
+  vec2 heading = direction / max(length(direction), 1.0);      // never longer than 1, even on a diagonal
+  return uv + heading * (depth - uFocus) * (0.03 / reach);     // never more than 0.03, in any direction
 }
 // plate = texture(uPlate, parallax(uPlateDepth, uv, uParallax)); subject over it with its alpha
 ```
@@ -252,6 +256,7 @@ Every Magnific step here is paid: quote it like any other call (§2).
 - More than 150 frames as AVIF, or a stage over 6 MB on desktop or 3 MB on phones, in any format.
 - Several shots in one folder; the poster stored twice.
 - Decoding every frame up front, one queue per shot, or decoding on the main thread with `<img>` uploads.
+- Retrying a frame that failed, or a store or clip created during render (StrictMode closes it in development).
 - A first drawn frame that is not the poster, or a dissolve into a shot whose frame is not there yet.
 - 2.5D shifts beyond 3 % of the width, or a background plate without its subject removed.
 

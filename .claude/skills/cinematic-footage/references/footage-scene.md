@@ -1,14 +1,17 @@
 # Footage scene
 
-Four modules that typecheck, lint and format as written in this repository, run in a browser (Vitest browser mode, the package's own set-up) on three short AVIF shots and an all-intra MP4:
+The modules and tests of a scroll-driven footage stage, checked as written in this repository (typecheck, `oxlint --type-aware`, `oxfmt`) and run in Vitest browser mode, the package's own set-up:
 
 - The first frame draws upright, from the frame the poster shows.
 - One load queue serves the whole stage: never more than 6 requests in flight, every shot's coarse frames first (`a/0001 a/0009 a/0012 b/0001 b/0009 b/0012 c/0001 …`), then the frames closest to the playhead.
 - Decoded bitmaps stay at 8 for the stage (9 alive counting the first frame's), across a walk through all three shots.
-- With decoding slowed to 1.5 s, a jump straight into a dissolve showed no pixel of the next shot and no black pixel until its first frame was on the texture; then the dissolve ran. No capture of the walk had a black pixel.
-- The clip draws its first frame at once (suspended until `loadeddata`), lands its coalesced seeks on the latest target, and releases its video after unmount.
+- With decoding slowed to 1.5 s, a jump straight into a dissolve showed no pixel of the next shot and no black pixel until its first frame was on the texture; then the dissolve ran.
+- Under StrictMode with 300 ms of network latency, frames keep loading to the last shot. With the store created during render and aborted by the first cleanup, the same test fails: no frame after the first ever arrives.
+- A frame answered with a 404 is asked once, a frame that does not decode is decoded once, and the picture shows a neighbour, never black. Before the fix, the missing frame was asked twice and the broken one decoded again on every frame.
+- `place` holds the first frame through the dead zone (the first tenth of the scroll) and ends on the last frame of the last shot.
+- The clip, under StrictMode, draws its first frame at once, scrubs, and is opened again by the second mount instead of staying closed.
 
-Shared GLSL comes from `shader-chunks.ts` (`shader-craft` `references/shader-chunks.md`): these modules import it, never copy it. Rename `footage` to the effect's name.
+Shared code comes from `shader-craft` (`references/shader-chunks.md` for the GLSL, `references/effect-skeleton.md` for `useSceneResource` and the test support): these modules import it, never copy it. Rename `footage` to the effect's name.
 
 ## `apps/web/src/features/<feature>/<slot>-frames.ts`
 
@@ -18,8 +21,14 @@ The app builds the URLs, with the base path of the static export. The first land
 import poster from "./images/<slot>-poster.avif";
 
 const MEDIA = `${process.env.NEXT_PUBLIC_BASE_PATH}/media/<feature>`;
+/* The stage's shots in story order: each one's folder name and frame count. */
+const SHOTS = [
+  ["first-shot", 50],
+  ["second-shot", 50],
+  ["third-shot", 50],
+] as const;
 
-/* Frame URLs of one shot: 0001.avif, 0002.avif… in the shot's folder, or in its portrait crop. */
+/* Frame URLs of one shot: 0001.avif, 0002.avif… in its folder, or in its portrait crop. */
 function frames(shot: string, count: number, crop: "" | "/portrait" = ""): string[] {
   return Array.from(
     { length: count },
@@ -28,17 +37,11 @@ function frames(shot: string, count: number, crop: "" | "/portrait" = ""): strin
 }
 
 /* The poster is frame 0001 of the first landscape shot: the scene loads it from the same URL, so it downloads once. */
-export const journeyShots = {
-  landscape: [
-    [poster.src, ...frames("dive", 50).slice(1)],
-    frames("rise", 50),
-    frames("clouds", 50),
-  ],
-  portrait: [
-    frames("dive", 50, "/portrait"),
-    frames("rise", 50, "/portrait"),
-    frames("clouds", 50, "/portrait"),
-  ],
+export const stageShots = {
+  landscape: SHOTS.map(([shot, count], index) =>
+    index === 0 ? [poster.src, ...frames(shot, count).slice(1)] : frames(shot, count),
+  ),
+  portrait: SHOTS.map(([shot, count]) => frames(shot, count, "/portrait")),
 };
 ```
 
@@ -55,6 +58,8 @@ const DECODED_FRAMES = 8;
 const COARSE_STRIDE = 8;
 /* The share of each shot's scroll during which the next shot dissolves in. */
 const DISSOLVE_SHARE = 0.2;
+/* The first tenth of the scroll holds the first frame: a scene mounted there still shows the poster's frame. */
+const DEAD_ZONE = 0.1;
 
 export interface Frame {
   index: number;
@@ -72,6 +77,7 @@ export interface FrameStore {
   /* The frame the scroll shows, and the next shot's first frame once it is being prepared: never evicted. */
   playhead: number;
   prepared: number | undefined;
+  loading: AbortController;
 }
 
 export interface Placement {
@@ -111,7 +117,7 @@ function nextToLoad(store: FrameStore): number | undefined {
   return best;
 }
 
-export function createFrameStore(shots: string[][], signal: AbortSignal): FrameStore {
+export function createFrameStore(shots: string[][]): FrameStore {
   const starts = shots.map((_, shot) =>
     shots.slice(0, shot).reduce((sum, urls) => sum + urls.length, 0),
   );
@@ -125,14 +131,21 @@ export function createFrameStore(shots: string[][], signal: AbortSignal): FrameS
     decoding: new Set(),
     playhead: 0,
     prepared: undefined,
+    loading: new AbortController(),
   };
   async function work(): Promise<void> {
     for (let index = nextToLoad(store); index !== undefined; index = nextToLoad(store)) {
       store.requested.add(index);
       // oxlint-disable-next-line no-await-in-loop -- each worker fetches one frame at a time, the closest still missing.
-      const response = await fetch(store.urls[index] ?? "", { signal, priority: "low" });
-      // oxlint-disable-next-line no-await-in-loop -- same worker: the body is read before the next pick.
-      store.blobs[index] = await response.blob();
+      const response = await fetch(store.urls[index] ?? "", {
+        signal: store.loading.signal,
+        priority: "low",
+      });
+      /* A frame that fails stays requested and missing: never fetched again, its neighbours stand in. */
+      if (response.ok) {
+        // oxlint-disable-next-line no-await-in-loop -- same worker: the body is read before the next pick.
+        store.blobs[index] = await response.blob();
+      }
     }
   }
   /* Aborted on unmount; a frame that fails stays missing and its neighbours stand in. */
@@ -175,7 +188,8 @@ function evict(store: FrameStore): void {
   }
 }
 
-/* Decoded off the main thread, already flipped for WebGL: three's flipY does nothing on an ImageBitmap. */
+/* Decoded off the main thread, already flipped for WebGL: three's flipY does nothing on an ImageBitmap.
+   A frame that does not decode is dropped for good, so it is never retried and its neighbours stand in. */
 async function decode(store: FrameStore, index: number, blob: Blob): Promise<void> {
   store.decoding.add(index);
   try {
@@ -185,9 +199,21 @@ async function decode(store: FrameStore, index: number, blob: Blob): Promise<voi
     });
     store.decoded.set(index, bitmap);
     evict(store);
+  } catch {
+    const { blobs } = store;
+    blobs[index] = undefined;
   } finally {
     store.decoding.delete(index);
   }
+}
+
+/* Stops loading and frees every decoded frame, when the scene unmounts. */
+export function closeFrameStore(store: FrameStore): void {
+  store.loading.abort();
+  for (const bitmap of store.decoded.values()) {
+    bitmap.close();
+  }
+  store.decoded.clear();
 }
 
 /* The closest decoded frame of the target's shot, while the exact one decodes. */
@@ -200,9 +226,7 @@ export function frameAt(store: FrameStore, target: number): Frame | undefined {
     !store.decoded.has(source) &&
     !store.decoding.has(source)
   ) {
-    decode(store, source, blob).catch(() => {
-      store.decoding.delete(source);
-    });
+    decode(store, source, blob).catch(() => null);
   }
   const shown = nearestInShot(store, target, (index) => store.decoded.has(index));
   const bitmap = shown === undefined ? undefined : store.decoded.get(shown);
@@ -214,11 +238,12 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/* Each shot owns an equal part of the progress; the end of each part but the last dissolves into the next shot.
+/* After the dead zone, each shot owns an equal part of the progress; the end of each part but the last dissolves into the next shot.
    frame is a store index: starts[shot] plus the frame inside the shot. */
 export function place(progress: number, store: FrameStore): Placement {
   const shots = store.starts.length;
-  const scaled = Math.min(Math.max(progress, 0), 1) * shots;
+  const moving = Math.max(progress - DEAD_ZONE, 0) / (1 - DEAD_ZONE);
+  const scaled = Math.min(moving, 1) * shots;
   const shot = Math.min(Math.floor(scaled), shots - 1);
   const local = scaled - shot;
   const first = store.starts[shot] ?? 0;
@@ -276,7 +301,7 @@ export const DISSOLVE_FRAGMENT = `
 "use client";
 
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ImageBitmapLoader,
   LinearFilter,
@@ -287,14 +312,18 @@ import {
 } from "three";
 
 import type { SceneProps } from "../motion/stage.tsx";
-import { createFrameStore, type Frame, type FrameStore, frameAt, place } from "./footage-frames.ts";
+import { closeFrameStore, createFrameStore, type Frame, frameAt, place } from "./footage-frames.ts";
 import { DISSOLVE_FRAGMENT } from "./footage-shaders.ts";
 import { FULL_SCREEN } from "./shader-chunks.ts";
 import { StageCanvas } from "./stage-canvas.tsx";
 import { useFirstFrame } from "./use-first-frame.ts";
+import { useSceneResource } from "./use-scene-resource.ts";
 
 /* From this far into a shot, the next shot's first frame is decoded and waiting on the second texture. */
 const PREPARE_NEXT_FROM = 0.5;
+/* The portrait frames (a 506×900 crop) match the poster's cover crop only in boxes at most this wide for their
+   height: wider boxes (a tablet held upright, a 4:5 stage) use the landscape frames, cropped like the poster. */
+const PORTRAIT_ASPECT = 506 / 900;
 
 type Orientation = "landscape" | "portrait";
 
@@ -319,8 +348,9 @@ function frameTexture(image?: ImageBitmap): Texture<ImageBitmap | undefined> {
   return texture;
 }
 
-/* Built imperatively: the material keeps this very uniforms object, while R3F's uniforms prop copies it. */
-function createFootage(first: ImageBitmap) {
+/* Built imperatively: the material keeps this very uniforms object, while R3F's uniforms prop copies it.
+   The store loads the frames; everything is made and released together (see useSceneResource). */
+function createFootage(first: ImageBitmap, shots: string[][]) {
   const uniforms = {
     uShotA: { value: frameTexture(first) },
     uShotB: { value: frameTexture() },
@@ -334,10 +364,17 @@ function createFootage(first: ImageBitmap) {
     vertexShader: FULL_SCREEN,
     fragmentShader: DISSOLVE_FRAGMENT,
   });
-  return { material, uniforms };
+  return { material, uniforms, store: createFrameStore(shots) };
 }
 
 type FootageState = ReturnType<typeof createFootage>;
+
+function disposeFootage({ material, uniforms, store }: FootageState): void {
+  closeFrameStore(store);
+  material.dispose();
+  uniforms.uShotA.value.dispose();
+  uniforms.uShotB.value.dispose();
+}
 
 function show(texture: Texture<ImageBitmap | undefined>, frame: Frame | undefined): void {
   if (frame === undefined || texture.image === frame.bitmap) {
@@ -348,11 +385,8 @@ function show(texture: Texture<ImageBitmap | undefined>, frame: Frame | undefine
 
 /* Mutations live outside the component: the React Compiler lint rejects writing to hook values in useFrame.
    The dissolve stays at 0 until the second texture holds the next shot's first frame: no black, no stale frame. */
-function advance(
-  footage: FootageState,
-  store: FrameStore,
-  frame: { delta: number; progress: number },
-): void {
+function advance(footage: FootageState, frame: { delta: number; progress: number }): void {
+  const { store } = footage;
   const { uShotA, uShotB, uDissolve, uTime } = footage.uniforms;
   const placement = place(frame.progress, store);
   const next = store.starts[placement.shot + 1];
@@ -368,41 +402,38 @@ function advance(
   uTime.value += frame.delta;
 }
 
-function FootagePlane({ onReady, shots, progress }: Omit<FootageSceneProps, "tier">) {
-  /* The crop follows the stage's own box at mount, not the window or the tier. */
-  const size = useThree((state) => state.size);
-  const [orientation] = useState<Orientation>(() =>
-    size.height > size.width ? "portrait" : "landscape",
-  );
-  const chosen = shots[orientation];
-  /* Suspends until the first frame is decoded: the scene's first frame is the poster's frame. */
-  const first = useLoader(ImageBitmapLoader, chosen[0]?.[0] ?? "", (loader) => {
-    loader.setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" });
-  });
-  const [footage] = useState(() => createFootage(first));
-  const [loading] = useState(() => new AbortController());
-  const [store] = useState(() => createFrameStore(chosen, loading.signal));
-  useEffect(
-    () => () => {
-      loading.abort();
-      footage.material.dispose();
-      footage.uniforms.uShotA.value.dispose();
-      footage.uniforms.uShotB.value.dispose();
-      for (const bitmap of store.decoded.values()) {
-        bitmap.close();
-      }
-    },
-    [footage, loading, store],
-  );
+/* Rendered once the footage exists, so the first frame it reports is a drawn one. */
+function FootageFrame({
+  footage,
+  onReady,
+  progress,
+}: { footage: FootageState } & Pick<FootageSceneProps, "onReady" | "progress">) {
   useFirstFrame(onReady);
   useFrame((state, delta) => {
-    advance(footage, store, { delta, progress: progress.value });
+    advance(footage, { delta, progress: progress.value });
     state.gl.getDrawingBufferSize(footage.uniforms.uResolution.value);
   });
   return (
     <mesh frustumCulled={false} material={footage.material}>
       <planeGeometry args={[2, 2]} />
     </mesh>
+  );
+}
+
+function FootagePlane({ onReady, shots, progress }: Omit<FootageSceneProps, "tier">) {
+  /* The crop follows the stage's own box at mount, not the window or the tier. */
+  const size = useThree((state) => state.size);
+  const [orientation] = useState<Orientation>(() =>
+    size.width / size.height <= PORTRAIT_ASPECT ? "portrait" : "landscape",
+  );
+  const chosen = shots[orientation];
+  /* Suspends until the first frame is decoded: the scene's first frame is the poster's frame. */
+  const first = useLoader(ImageBitmapLoader, chosen[0]?.[0] ?? "", (loader) => {
+    loader.setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" });
+  });
+  const footage = useSceneResource(createFootage, disposeFootage, first, chosen);
+  return footage === null ? null : (
+    <FootageFrame footage={footage} onReady={onReady} progress={progress} />
   );
 }
 
@@ -417,7 +448,7 @@ export function FootageScene({ tier, ...footage }: FootageSceneProps) {
 
 ## `packages/ui/src/scene/<effect>-clip.ts` (beyond 150 frames)
 
-For a shot past 150 frames, the scene reads `const clip = use(loadClip(url))` instead of a frame store: it suspends until the first frame is decoded, then `advance` calls `clip.seek(local × clip.duration)` and the material samples `clip.texture`. Dispose the clip in the scene's unmount effect.
+For a shot past 150 frames, the scene opens a clip instead of a frame store: `const clip = useSceneResource(openClip, closeClip, url)`, then a child component calls `use(clip.ready)` (it suspends until the first frame is decoded), seeks with `clip.seek(local × clip.video.duration)` in `useFrame`, and samples `clip.texture`. `tests/<effect>-clip.test.tsx` below shows the whole pattern.
 
 ```ts
 import { LinearFilter, VideoTexture } from "three";
@@ -426,22 +457,45 @@ import { LinearFilter, VideoTexture } from "three";
 const SAME_TIME = 0.001;
 
 export interface Clip {
+  video: HTMLVideoElement;
   texture: VideoTexture;
-  duration: number;
+  /* Resolves at loadeddata: the duration is known and the first frame decoded. */
+  ready: Promise<void>;
   seek: (time: number) => void;
-  dispose: () => void;
 }
 
-const clips = new Map<string, Promise<Clip>>();
+/* Waits for the first frame. A clip that fails to load rejects, and the stage's boundary brings the poster back. */
+function firstFrame(video: HTMLVideoElement, texture: VideoTexture): Promise<void> {
+  const ready = new Promise<void>((resolve, reject) => {
+    video.addEventListener("loadeddata", () => {
+      Object.assign(texture, { needsUpdate: true });
+      resolve();
+    });
+    video.addEventListener("error", () => {
+      reject(new Error(`The clip ${video.src} did not load.`));
+    });
+  });
+  /* A clip closed before it loaded may still reject: nobody waits on it any more. */
+  ready.catch(() => null);
+  return ready;
+}
 
-/* An all-intra clip (every frame a keyframe) scrubbed by seeking: one seek at a time, always to the latest target,
-   because queued seeks make the picture trail the scroll. The texture updates when a seek lands. */
-function createClip(url: string, video: HTMLVideoElement): Clip {
+/* An all-intra clip (every frame a keyframe) scrubbed by seeking. iOS Safari may load nothing until a video plays,
+   so the clip starts muted and goes back to its first frame, paused, as soon as it plays; if play() is refused and
+   no data comes, ready never resolves and the poster stays. Seeks run one at a time, always to the latest target,
+   because queued seeks make the picture trail the scroll; the texture updates when a seek lands. */
+export function openClip(url: string): Clip {
+  const video = Object.assign(document.createElement("video"), {
+    muted: true,
+    playsInline: true,
+    preload: "auto",
+    src: url,
+  });
   const texture = Object.assign(new VideoTexture(video), {
     minFilter: LinearFilter,
     generateMipmaps: false,
-    needsUpdate: true,
   });
+  const ready = firstFrame(video, texture);
   let seeking = false;
   let target: number | undefined;
   function seek(time: number): void {
@@ -465,48 +519,288 @@ function createClip(url: string, video: HTMLVideoElement): Clip {
       seek(next);
     }
   });
-  function dispose(): void {
-    clips.delete(url);
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
-    texture.dispose();
-  }
-  return { texture, duration: video.duration, seek, dispose };
+  video.addEventListener(
+    "playing",
+    () => {
+      video.pause();
+      seek(0);
+    },
+    { once: true },
+  );
+  video.play().catch(() => null);
+  return { video, texture, ready, seek };
 }
 
-/* Resolves at loadeddata: the duration is known and the first frame decoded, so a scene that suspends on it
-   (React's use) never fades in black, and every seek fires seeked. Cached by URL, as use() requires. */
-export function loadClip(url: string): Promise<Clip> {
-  const cached = clips.get(url);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const opening = new Promise<Clip>((resolve, reject) => {
-    const video = Object.assign(document.createElement("video"), {
-      muted: true,
-      playsInline: true,
-      preload: "auto",
-      src: url,
-    });
-    video.addEventListener("loadeddata", () => {
-      resolve(createClip(url, video));
-    });
-    video.addEventListener("error", () => {
-      reject(new Error(`The clip ${url} did not load.`));
-    });
-  });
-  clips.set(url, opening);
-  return opening;
+/* Releases the video's data and the texture, when the scene unmounts. */
+export function closeClip({ video, texture }: Clip): void {
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  texture.dispose();
 }
+```
+
+## `packages/ui/tests/<effect>-scene.test.tsx`
+
+Frames are drawn in the test and served from memory; the network and the decoder are watched with pass-through spies.
+
+```tsx
+import { StrictMode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render } from "vitest-browser-react";
+
+import { closeFrameStore, createFrameStore, place } from "../src/scene/footage-frames.ts";
+import { FootageScene } from "../src/scene/footage-scene.tsx";
+import { canvasIn, canvasPixels, countPixels } from "./support/canvas-pixels.ts";
+
+const FRAMES = 12;
+const LATENCY_MS = 300;
+
+/* A shot of identical frames served from memory: red over blue (to see the orientation), or one colour. */
+async function shotUrls(paint: "red-over-blue" | "green" | "grey"): Promise<string[]> {
+  const canvas = new OffscreenCanvas(320, 180);
+  const context = canvas.getContext("2d");
+  const colours = {
+    "red-over-blue": ["#f00", "#00f"],
+    green: ["#0a0", "#0a0"],
+    grey: ["#ccc", "#ccc"],
+  };
+  const [top = "", bottom = ""] = colours[paint];
+  context?.fillRect(0, 0, 0, 0);
+  if (context !== null) {
+    context.fillStyle = top;
+    context.fillRect(0, 0, 320, 90);
+    context.fillStyle = bottom;
+    context.fillRect(0, 90, 320, 90);
+  }
+  const url = URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
+  return Array.from({ length: FRAMES }, () => url);
+}
+
+function slowFetch(): void {
+  const network = window.fetch.bind(window);
+  vi.spyOn(window, "fetch").mockImplementation(async (input, init) => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, LATENCY_MS);
+    });
+    return network(input, init);
+  });
+}
+
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return input;
+  }
+  return input instanceof URL ? input.href : input.url;
+}
+
+/* Answers 404 for one URL and lets every other request through; returns the spy, to count requests. */
+function missingFrame(url: string) {
+  const network = window.fetch.bind(window);
+  return vi
+    .spyOn(window, "fetch")
+    .mockImplementation((input, init) =>
+      urlOf(input) === url
+        ? Promise.resolve(new Response(null, { status: 404 }))
+        : network(input, init),
+    );
+}
+
+/* Watches every decode, letting it through; decodesOf counts those of one blob, told apart by its size. */
+function watchDecodes() {
+  return vi.spyOn(window, "createImageBitmap");
+}
+
+function decodesOf(decodes: ReturnType<typeof watchDecodes>, size: number): number {
+  return decodes.mock.calls.filter(([image]) => image instanceof Blob && image.size === size)
+    .length;
+}
+
+async function mountFootage(
+  shots: string[][],
+  progress: { value: number },
+): Promise<HTMLCanvasElement> {
+  const ready = vi.fn<() => void>();
+  const screen = await render(
+    <StrictMode>
+      <div style={{ width: 320, height: 180, position: "relative" }}>
+        <FootageScene
+          tier="full"
+          onReady={ready}
+          progress={progress}
+          shots={{ landscape: shots, portrait: shots }}
+        />
+      </div>
+    </StrictMode>,
+  );
+  await expect.poll(() => ready.mock.calls.length, { timeout: 15_000 }).toBe(1);
+  return canvasIn(screen.container);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("place", () => {
+  const store = createFrameStore([
+    Array.from({ length: FRAMES }, (_, index) => `first-${index}`),
+    Array.from({ length: FRAMES }, (_, index) => `second-${index}`),
+  ]);
+  closeFrameStore(store);
+
+  it("holds the first frame through the dead zone", () => {
+    expect(place(0.08, store)).toMatchObject({ shot: 0, frame: 0, dissolve: 0 });
+  });
+
+  it("dissolves the end of a shot into the next one", () => {
+    expect(place(0.53, store).dissolve).toBeGreaterThan(0);
+  });
+
+  it("ends on the last frame of the last shot", () => {
+    expect(place(1, store)).toMatchObject({ shot: 1, frame: FRAMES * 2 - 1, dissolve: 0 });
+  });
+});
+
+describe("footage scene under StrictMode", () => {
+  it("keeps loading frames after the double mount of development, over a slow network", async () => {
+    slowFetch();
+    const shots = [
+      await shotUrls("red-over-blue"),
+      await shotUrls("green"),
+      await shotUrls("grey"),
+    ];
+    const progress = { value: 0 };
+    const canvas = await mountFootage(shots, progress);
+
+    progress.value = 1;
+
+    await expect
+      .poll(
+        async () =>
+          countPixels(
+            await canvasPixels(canvas),
+            (red, green, blue) => Math.min(red, green, blue) > 150,
+          ),
+        {
+          timeout: 10_000,
+        },
+      )
+      .toBeGreaterThan(2000);
+  });
+
+  it("asks once for a frame that fails, decodes a broken one once, and shows a neighbour, never black", async () => {
+    const shot = await shotUrls("red-over-blue");
+    const missing = `${shot.join("")}#missing`;
+    const brokenBytes = "not an image";
+    const broken = URL.createObjectURL(new Blob([brokenBytes]));
+    const fetches = missingFrame(missing);
+    const decodes = watchDecodes();
+    const progress = { value: 0 };
+    const canvas = await mountFootage(
+      [[...shot.slice(0, 5), missing, broken, ...shot.slice(7)]],
+      progress,
+    );
+
+    progress.value = 0.55;
+    const pixels = await canvasPixels(canvas);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
+
+    expect(fetches.mock.calls.filter(([input]) => urlOf(input) === missing)).toHaveLength(1);
+    expect(decodesOf(decodes, brokenBytes.length)).toBe(1);
+    expect(countPixels(pixels, (red, green, blue) => red + green + blue < 30)).toBe(0);
+  });
+});
+```
+
+## `packages/ui/tests/<effect>-clip.test.tsx`
+
+The fixture is a 2-second all-intra clip, 31 KB, made once:
+
+```bash
+ffmpeg -f lavfi -i "testsrc2=size=128x72:rate=15:duration=2" -an -c:v libx264 -crf 32 -g 1 -bf 0 \
+  -pix_fmt yuv420p -movflags +faststart packages/ui/tests/fixtures/clip.mp4
+```
+
+```tsx
+import { useFrame } from "@react-three/fiber";
+import { StrictMode, use } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { render } from "vitest-browser-react";
+
+import { type Clip, closeClip, openClip } from "../src/scene/footage-clip.ts";
+import { StageCanvas } from "../src/scene/stage-canvas.tsx";
+import { useFirstFrame } from "../src/scene/use-first-frame.ts";
+import { useSceneResource } from "../src/scene/use-scene-resource.ts";
+import clipUrl from "./fixtures/clip.mp4?url";
+import { canvasIn, canvasPixels, countPixels } from "./support/canvas-pixels.ts";
+
+interface ClipProps {
+  onReady: () => void;
+  progress: { value: number };
+}
+
+function ClipFrame({ clip, onReady, progress }: ClipProps & { clip: Clip }) {
+  use(clip.ready);
+  useFirstFrame(onReady);
+  useFrame(() => {
+    clip.seek(progress.value * clip.video.duration);
+  });
+  return (
+    <mesh>
+      <planeGeometry args={[2, 2]} />
+      <meshBasicMaterial map={clip.texture} toneMapped={false} />
+    </mesh>
+  );
+}
+
+/* The way a scene uses a clip: opened in the effect that closes it, drawn once its first frame is decoded. */
+function ClipPlane(props: ClipProps) {
+  const clip = useSceneResource(openClip, closeClip, clipUrl);
+  return clip === null ? null : <ClipFrame clip={clip} {...props} />;
+}
+
+describe("clip under StrictMode", () => {
+  it("draws its first frame, scrubs, and survives the double mount of development", async () => {
+    const ready = vi.fn<() => void>();
+    const progress = { value: 0 };
+    const screen = await render(
+      <StrictMode>
+        <div style={{ width: 320, height: 180, position: "relative" }}>
+          <StageCanvas
+            tier="light"
+            flat
+            orthographic
+            camera={{ position: [0, 0, 1], left: -1, right: 1, top: 1, bottom: -1 }}
+          >
+            <ClipPlane onReady={ready} progress={progress} />
+          </StageCanvas>
+        </div>
+      </StrictMode>,
+    );
+    await expect.poll(() => ready.mock.calls.length, { timeout: 15_000 }).toBe(1);
+    const canvas = canvasIn(screen.container);
+    const first = await canvasPixels(canvas);
+
+    progress.value = 0.8;
+
+    expect(countPixels(first, (red, green, blue) => red + green + blue > 120)).toBeGreaterThan(100);
+    await expect
+      .poll(async () => (await canvasPixels(canvas)).join() === first.join(), { timeout: 5000 })
+      .toBe(false);
+  });
+});
 ```
 
 Why it is shaped this way:
 
 - The first frame comes through `useLoader(ImageBitmapLoader, …)`, which suspends: the scene mounts with the poster's frame already decoded, so its first drawn frame is the poster and the crossfade does not pop.
-- The crop is chosen from the stage's own box when the scene mounts (`useThree` size), not from the window or the tier: a landscape tablet is `light` but wide, and a stage need not fill the window.
+- The frame store, the textures and the material are made in the effect that disposes them (`useSceneResource`): under StrictMode in development, a store created during render would be aborted by the first cleanup and never load another frame. The same holds for the clip: `openClip` in the effect, `closeClip` in its cleanup.
+- The crop is chosen from the stage's own box when the scene mounts: the portrait frames only when the box is at most 506/900 as wide as it is tall, where their crop matches the poster's cover crop. A tablet held upright (0.75) or a 4:5 stage would zoom the portrait crop 1.33 times and upscale it, so those boxes use the landscape frames.
 - One store per stage: frames are fetched as compressed blobs (about 6 MB for a whole desktop stage) and decoded on demand with `createImageBitmap`, off the main thread. Only 8 decoded frames stay, the farthest from the playhead closing first; the playhead and the prepared frame never close. 150 decoded 1600×900 frames would take 860 MB.
+- A frame that fails stays requested and missing: a non-OK response is never stored, a blob that does not decode is dropped, so neither is asked or decoded again, and the nearest neighbour stands in.
 - The next shot's first frame is decoded from the middle of the current shot and uploaded to the second texture before the dissolve starts; the dissolve stays at 0 until it is there.
 - `imageOrientation: "flipY"` at decode, `flipY: false` on the texture: three's `flipY` does nothing on an `ImageBitmap`, and a frame decoded without the flip draws upside down. No mipmaps: a frame change is one upload.
 - Materials are built imperatively, and writes go through module-level functions, for the reasons in `shader-craft` §3.
-- The clip resolves at `loadeddata`, when the duration is known: a seek before metadata never fires `seeked`, and a `NaN` duration would make every seek target `NaN`. Seeks are coalesced: setting `currentTime` on every scroll frame queues seeks and the picture lags behind the scroll.
+- The clip starts muted and pauses back on its first frame as soon as it plays, because iOS Safari may load nothing until a video plays; if `play()` is refused and no data comes, `ready` never resolves and the poster stays. `ready` resolves at `loadeddata`, when the duration is known: a seek before metadata never fires `seeked`, and a `NaN` duration would make every seek target `NaN`. Seeks are coalesced: setting `currentTime` on every scroll frame queues seeks and the picture lags behind the scroll.
