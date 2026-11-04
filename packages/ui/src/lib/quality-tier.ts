@@ -2,7 +2,6 @@ export type QualityTier = "light" | "full";
 
 export interface DeviceProfile {
   reducedMotion: boolean;
-  webgl2: boolean;
   narrow: boolean;
   coarsePointer: boolean;
 }
@@ -14,7 +13,7 @@ export const pixelRatio: Record<QualityTier, [number, number]> = {
 
 /* No tier means no live scene: the poster stays. */
 export function tierFor(profile: DeviceProfile): QualityTier | null {
-  if (profile.reducedMotion || !profile.webgl2) {
+  if (profile.reducedMotion) {
     return null;
   }
   if (profile.narrow || profile.coarsePointer) {
@@ -23,10 +22,10 @@ export function tierFor(profile: DeviceProfile): QualityTier | null {
   return "full";
 }
 
-/* The answer cannot change within a page: a scene asking again must not open another context. */
+/* Creating a context is the costly probe: ask only when a scene is about to mount. The answer cannot change within a page, so a scene asking again must not open another context. */
 let webgl2Supported: boolean | undefined;
 
-function supportsWebgl2(): boolean {
+export function supportsWebgl2(): boolean {
   webgl2Supported ??= document.createElement("canvas").getContext("webgl2") !== null;
   return webgl2Supported;
 }
@@ -38,7 +37,6 @@ function matches(query: string): boolean {
 export function readDeviceProfile(): DeviceProfile {
   return {
     reducedMotion: matches("(prefers-reduced-motion: reduce)"),
-    webgl2: supportsWebgl2(),
     narrow: !matches("(min-width: 48rem)"),
     coarsePointer: matches("(pointer: coarse)"),
   };

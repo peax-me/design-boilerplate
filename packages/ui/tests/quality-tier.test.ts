@@ -4,18 +4,17 @@ import { type DeviceProfile, pixelRatio, tierFor } from "../src/lib/quality-tier
 
 const capableDesktop: DeviceProfile = {
   reducedMotion: false,
-  webgl2: true,
   narrow: false,
   coarsePointer: false,
 };
 
 interface DeviceSignals {
-  matchingQueries: readonly string[];
-  webgl2: boolean;
+  matchingQueries?: readonly string[];
+  webgl2?: boolean;
 }
 
-/* The unit project runs in node: the window and the document are stubbed down to what the profile reads. */
-function stubDevice({ matchingQueries, webgl2 }: DeviceSignals) {
+/* The unit project runs in node: the window and the document are stubbed down to what the lib reads. */
+function stubDevice({ matchingQueries = [], webgl2 = true }: DeviceSignals = {}) {
   const createElement = vi.fn<(tag: string) => { getContext: (kind: string) => object | null }>(
     (tag) => ({
       getContext: (kind) => (tag === "canvas" && kind === "webgl2" && webgl2 ? {} : null),
@@ -29,10 +28,9 @@ function stubDevice({ matchingQueries, webgl2 }: DeviceSignals) {
 }
 
 /* The WebGL2 answer is kept for the page: every test loads its own copy of the module. */
-async function freshReadDeviceProfile(): Promise<() => DeviceProfile> {
+function freshQualityTier() {
   vi.resetModules();
-  const { readDeviceProfile } = await import("../src/lib/quality-tier.ts");
-  return readDeviceProfile;
+  return import("../src/lib/quality-tier.ts");
 }
 
 afterEach(() => {
@@ -42,10 +40,6 @@ afterEach(() => {
 describe("tierFor", () => {
   it("gives no tier under reduced motion", () => {
     expect(tierFor({ ...capableDesktop, reducedMotion: true })).toBeNull();
-  });
-
-  it("gives no tier without WebGL2", () => {
-    expect(tierFor({ ...capableDesktop, webgl2: false })).toBeNull();
   });
 
   it("gives the light tier on a narrow screen", () => {
@@ -62,40 +56,44 @@ describe("tierFor", () => {
 });
 
 describe("readDeviceProfile", () => {
-  it("reads a phone: narrow, coarse pointer, reduced motion, no WebGL2", async () => {
-    stubDevice({
-      matchingQueries: ["(prefers-reduced-motion: reduce)", "(pointer: coarse)"],
-      webgl2: false,
-    });
-    const readDeviceProfile = await freshReadDeviceProfile();
+  it("reads a phone: narrow, coarse pointer, reduced motion", async () => {
+    stubDevice({ matchingQueries: ["(prefers-reduced-motion: reduce)", "(pointer: coarse)"] });
+    const { readDeviceProfile } = await freshQualityTier();
 
     expect(readDeviceProfile()).toStrictEqual({
       reducedMotion: true,
-      webgl2: false,
       narrow: true,
       coarsePointer: true,
     });
   });
 
-  it("reads a desktop: wide, fine pointer, motion allowed, WebGL2", async () => {
-    stubDevice({ matchingQueries: ["(min-width: 48rem)"], webgl2: true });
-    const readDeviceProfile = await freshReadDeviceProfile();
+  it("reads a desktop: wide, fine pointer, motion allowed", async () => {
+    stubDevice({ matchingQueries: ["(min-width: 48rem)"] });
+    const { readDeviceProfile } = await freshQualityTier();
 
     expect(readDeviceProfile()).toStrictEqual(capableDesktop);
   });
 
-  it.each([true, false])(
-    "probes WebGL2 once per page when the answer is %s, however many scenes ask",
-    async (webgl2) => {
-      const createElement = stubDevice({ matchingQueries: [], webgl2 });
-      const readDeviceProfile = await freshReadDeviceProfile();
+  it("creates no WebGL context: only the scene about to mount pays for one", async () => {
+    const createElement = stubDevice();
+    const { readDeviceProfile } = await freshQualityTier();
 
-      const answers = [readDeviceProfile(), readDeviceProfile(), readDeviceProfile()];
+    readDeviceProfile();
 
-      expect(answers.map((profile) => profile.webgl2)).toStrictEqual([webgl2, webgl2, webgl2]);
-      expect(createElement).toHaveBeenCalledTimes(1);
-    },
-  );
+    expect(createElement).not.toHaveBeenCalled();
+  });
+});
+
+describe("supportsWebgl2", () => {
+  it.each([true, false])("answers %s once per page, however many scenes ask", async (webgl2) => {
+    const createElement = stubDevice({ webgl2 });
+    const { supportsWebgl2 } = await freshQualityTier();
+
+    const answers = [supportsWebgl2(), supportsWebgl2(), supportsWebgl2()];
+
+    expect(answers).toStrictEqual([webgl2, webgl2, webgl2]);
+    expect(createElement).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("pixelRatio", () => {

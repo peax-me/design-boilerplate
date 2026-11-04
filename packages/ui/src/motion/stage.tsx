@@ -12,7 +12,12 @@ import {
 
 import { cn } from "../lib/cn.ts";
 import { whenIdle } from "../lib/idle.ts";
-import { type QualityTier, readDeviceProfile, tierFor } from "../lib/quality-tier.ts";
+import {
+  type QualityTier,
+  readDeviceProfile,
+  supportsWebgl2,
+  tierFor,
+} from "../lib/quality-tier.ts";
 import { SceneBoundary } from "../scene/scene-boundary.tsx";
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
@@ -125,8 +130,8 @@ function usePosterFallback(root: HTMLElement | null): [fellBack: boolean, fallBa
   return [fellBack, fallBack];
 }
 
-/* The tier to run the scene at once every trigger has fired: the page is idle, the device can run a scene, the stage nears the window and, on light devices, the visitor has interacted. */
-function useSceneTier(root: HTMLElement | null): QualityTier | null {
+/* The tier to run the scene at once the page is idle, motion is allowed, the stage nears the window and, on light devices, the visitor has interacted. */
+function useTriggeredTier(root: HTMLElement | null): QualityTier | null {
   const tier = useIdleTier();
   const near = useNearWindow(root, tier !== null);
   const interacted = useFirstInteraction();
@@ -138,6 +143,16 @@ function useSceneTier(root: HTMLElement | null): QualityTier | null {
     return null;
   }
   return tier;
+}
+
+/* The tier to run the scene at once every trigger has fired and the device can create a WebGL2 context. Creating a context is the costliest probe: it is made only for a scene about to mount, so a page that never loads one never pays for it. Without WebGL2 the poster stays for the life of the page. */
+function useSceneTier(root: HTMLElement | null): QualityTier | null {
+  const triggeredTier = useTriggeredTier(root);
+
+  if (triggeredTier === null || !supportsWebgl2()) {
+    return null;
+  }
+  return triggeredTier;
 }
 
 export interface SceneProps {
