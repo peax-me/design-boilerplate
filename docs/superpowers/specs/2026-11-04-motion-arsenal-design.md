@@ -58,6 +58,7 @@ Pourquoi : une bibliothèque toute faite (HorizonX ou une nôtre) plafonne la qu
 - Entrée : une phrase ou un brief client. Sortie : une qualité HorizonX, en autonomie.
 - Pas de bibliothèque d'effets : des skills, MCP et outils pour créer à la demande. Aucun asset stocké ici.
 - Les ADR restent validés par l'utilisateur.
+- MCP Blender ajouté (failles corrigées). La télémétrie est désactivée sur chaque MCP qui le permet.
 - Test de réussite : l'utilisateur donne 3 briefs inédits, l'agent sort 3 pages seul, on les compare côte à côte avec HorizonX.
 - Plafond Magnific : 30 000 crédits par page, exploration, brouillons et reprises compris. Repères au 2026-11-04 : Seedance 2.5 10 s en 1080p = 7 900, en brouillon = 2 000, Kling 2.5 10 s en 1080p = 650, modèle 3D Tripo = 580, 4 images ≈ 200.
 - Mobile : l'effet signature tourne en direct sur téléphone, dans un palier allégé (moins de particules, résolution réduite, pas de post-traitement lourd). L'image fixe reste l'élément LCP. Cela remplace la règle d'ADR-0019 qui ne charge jamais WebGL sous `md`.
@@ -67,7 +68,7 @@ Pourquoi : une bibliothèque toute faite (HorizonX ou une nôtre) plafonne la qu
 ### 1. Armes de production (visuels)
 
 - **Magnific (déjà branché)** reste la source unique de génération : vidéo (Seedance 2.5 en tête, images de début et de fin pour boucler ou enchaîner les plans), 3D (Tripo, Hunyuan, Meshy, Trellis), cartes de profondeur, détourage vidéo, et `video_view_frames` / `video_analyze` gratuits pour juger un rendu.
-- **Blender en ligne de commande** (`blender -b -P`, sans réseau), pas le MCP Blender : alléger un modèle, échantillonner un mesh en nuage de points, rendre une image poster, exporter en GLB. Les scripts sont relus et versionnés comme outils. Choix de l'auteur, motivé par les failles CVE-2026-10661/10662/10688 et la télémétrie du MCP.
+- **MCP Blender** (`mcp-for-blender` 2.2.7, failles de juin 2026 corrigées), décision de l'utilisateur : construire, nettoyer et alléger une scène, rendre une image, exporter en GLB. Télémétrie coupée (`DISABLE_TELEMETRY=true`) et mode sûr activé (`BLENDER_MCP_SAFE_MODE=1` : il bloque l'accès direct aux fichiers, le lancement de programmes et le réseau, et garde la modélisation, les matériaux, le rendu et l'import-export), ce mode étant un choix de l'auteur. **Blender en ligne de commande** (`blender -b -P`) reste disponible pour les traitements en lot sans interface.
 - **Poly Haven** (CC0) pour les HDRI et textures PBR.
 - **ffmpeg et un encodeur AVIF/WebP** (avifenc et cwebp, ou sharp déjà présent) pour les séquences d'images et les vidéos de scrub.
 - **Spark** (MIT) pour afficher des splats, et **Brush** (Apache-2.0, local) pour les produire à partir d'images ou de vidéos Magnific, quand un projet en a besoin. Pas de Marble : Magnific reste le seul fournisseur payant (ADR-0018), donc toute dépense passe sous le même plafond (choix de l'auteur).
@@ -145,7 +146,7 @@ Permissions : les runs autonomes tournent dans le mode de permissions actuel des
 
 - L'arsenal de rendu : WebGL2 par défaut, `@react-three/postprocessing`, Spark, et drei si les techniques en ont besoin.
 - WebGL en direct sur mobile avec paliers de qualité, qui remplace ADR-0019 sur ce point, et Lighthouse sur mobile et desktop pour chaque route.
-- Les outils de production : Blender en ligne de commande, Poly Haven, ffmpeg et l'encodage AVIF.
+- Les outils de production : MCP Blender (télémétrie coupée, mode sûr) et Blender en ligne de commande, Poly Haven, ffmpeg et l'encodage AVIF.
 - Les MCP de vérification : la mise à jour Playwright et l'ajout de Chrome DevTools.
 - Le contrôle du mouvement en e2e.
 - Le support générique dans `@repo/ui`.

@@ -14,7 +14,8 @@
 
 - Lighthouse : performance ≥ 0.95, accessibilité, bonnes pratiques et SEO = 1, sur mobile ET desktop, pour chaque route de `apps/web/e2e/support/routes.ts`.
 - Plafond Magnific : 30 000 crédits par page, exploration, brouillons et reprises compris. Magnific est le seul fournisseur payant.
-- Licences autorisées pour le code et les assets livrés : MIT, Apache-2.0, BSD, Zlib, CC0, sorties Magnific. Exclus : LYGIA, code Shadertoy sans licence permissive explicite, poids Hunyuan auto-hébergés, Apple SHARP, MCP Blender.
+- Licences autorisées pour le code et les assets livrés : MIT, Apache-2.0, BSD, Zlib, CC0, sorties Magnific. Exclus : LYGIA, code Shadertoy sans licence permissive explicite, poids Hunyuan auto-hébergés, Apple SHARP.
+- Télémétrie coupée sur chaque MCP qui le permet : `DISABLE_TELEMETRY=true` pour Blender, `--no-usage-statistics` pour Chrome DevTools.
 - GSAP est la seule librairie d'animation ; pas de framer-motion ni de Motion.
 - Moteur : WebGL2 par défaut. WebGPU/TSL seulement au-delà d'un million de particules.
 - Mouvement réduit ou absence de WebGL2 : poster seul, page complète, aucun `canvas`.
@@ -70,7 +71,7 @@
     - Les budgets de perf sur vrai GPU.
   - **0027 Production tooling.**
     - Magnific comme seul fournisseur payant.
-    - Blender en ligne de commande (`blender -b -P`, hors réseau) à la place du MCP Blender : Amends ADR-0018. Motifs : CVE-2026-10661/10662/10688 et télémétrie.
+    - MCP Blender (`mcp-for-blender` 2.2.7, qui corrige les CVE-2026-10661/10662/10688), avec `DISABLE_TELEMETRY=true` et `BLENDER_MCP_SAFE_MODE=1` ; Blender en ligne de commande (`blender -b -P`) pour les lots sans interface. Le module complémentaire Blender s'installe par machine (`uvx mcp-for-blender install-addon`).
     - ffmpeg, avifenc et cwebp ; Poly Haven (CC0) ; Brush (Apache-2.0) pour entraîner des splats.
   - **0028 Autonomous mode.**
     - Deux arrêts durs : la dépense qui ferait dépasser 30 000 crédits par page, et toute décision hors des ADR acceptés (ADR `proposed`, puis arrêt).
@@ -325,11 +326,12 @@ it("reports WebGL and shader errors only", () => {
 
 - [ ] **Étape 1 : mettre à jour `.mcp.json`.**
   - `playwright.args` devient `["-y", "@playwright/mcp@0.0.84", "--caps=devtools"]`.
-  - Ajouter `"chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@1.12.0"] }`.
+  - Ajouter `"chrome-devtools": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@1.12.0", "--no-usage-statistics"] }`.
+  - Ajouter `"blender": { "command": "uvx", "args": ["mcp-for-blender@2.2.7"], "env": { "DISABLE_TELEMETRY": "true", "BLENDER_MCP_SAFE_MODE": "1" } }`.
 - [ ] **Étape 2 : ajouter à `permissions.allow`** :
   - `"Bash(ffmpeg *)"`, `"Bash(ffprobe *)"`, `"Bash(avifenc *)"`, `"Bash(cwebp *)"`, `"Bash(blender -b *)"` ;
   - `"Bash(pnpm test:e2e*)"`, `"Bash(pnpm --filter @repo/web lighthouse)"` ;
-  - `"mcp__magnific"`, `"mcp__playwright"`, `"mcp__chrome-devtools"`.
+  - `"mcp__magnific"`, `"mcp__playwright"`, `"mcp__chrome-devtools"`, `"mcp__blender"`.
 - [ ] **Étape 3 : vérifier.**
   - `node -e "JSON.parse(require('fs').readFileSync('.mcp.json'));JSON.parse(require('fs').readFileSync('.claude/settings.json'))"` passe.
   - `npx -y @playwright/mcp@0.0.84 --help` liste `--caps`.
@@ -459,7 +461,7 @@ it("reports WebGL and shader errors only", () => {
     - eau (`Water`, cible de reflet 256 en `light`, 512 en `full`) ;
     - bloom ; rayons de lumière seulement sur desktop ;
     - splats avec Spark, entraînés par Brush sur une vidéo Magnific en tour complet ;
-    - Blender en ligne de commande (scripts par projet dans `assets/3d/source/scripts/`, plus de MCP Blender) ;
+    - MCP Blender (mode sûr) pour construire, nettoyer et rendre ; Blender en ligne de commande pour les lots, scripts par projet dans `assets/3d/source/scripts/` ; installation du module complémentaire par machine ;
     - poster = capture Playwright de la première frame, convertie en AVIF.
   - **`scroll-storytelling`** :
     - une section typographie cinétique : SplitText (`autoSplit`, `onSplit`, `aria: "auto"`), cycle de mots avec flou réservé aux textes courts, ScrambleText, révélations par masque, texte final en mouvement réduit ;
