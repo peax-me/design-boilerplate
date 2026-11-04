@@ -6,11 +6,11 @@ import { useEffect } from "react";
 
 import { pixelRatio, type QualityTier } from "../lib/quality-tier.ts";
 
-/* A gap longer than this between two advanced frames is a pause (offscreen, background tab), not motion. */
-const MAX_FRAME_GAP_SECONDS = 0.1;
+/* A frame moves a scene by this much at most: a pause (offscreen, background tab) is not replayed, and a slow device still moves. */
+const MAX_FRAME_DELTA_SECONDS = 0.1;
 
 /* R3F renders only when advanced (frameloop "never"). GSAP's ticker is the one clock for every scene, and a canvas outside the window costs no frame.
-   R3F measures delta from its own clock, in the unit of the timestamp given: seconds here. After a pause that clock is reset to the ticker time, so the first frame back has no jump. */
+   R3F measures delta from its own clock, in the unit of the timestamp given: seconds here. That clock is held at most one capped frame behind the ticker. */
 function TickerFrames(): null {
   const advance = useThree((state) => state.advance);
   const clock = useThree((state) => state.clock);
@@ -18,7 +18,6 @@ function TickerFrames(): null {
 
   useEffect(() => {
     let inWindow = false;
-    let lastAdvance = Number.NEGATIVE_INFINITY;
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         inWindow = entry.isIntersecting;
@@ -30,10 +29,7 @@ function TickerFrames(): null {
       if (!inWindow) {
         return;
       }
-      if (time - lastAdvance > MAX_FRAME_GAP_SECONDS) {
-        clock.elapsedTime = time;
-      }
-      lastAdvance = time;
+      clock.elapsedTime = Math.max(clock.elapsedTime, time - MAX_FRAME_DELTA_SECONDS);
       advance(time);
     }
     gsap.ticker.add(advanceInWindow);

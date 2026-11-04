@@ -1,6 +1,6 @@
 import { useFrame } from "@react-three/fiber";
 import { gsap } from "gsap";
-import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
+import { afterEach, describe, expect, it, type Mock, onTestFinished, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import type { QualityTier } from "../src/lib/quality-tier.ts";
@@ -11,7 +11,13 @@ const SETTLE_MS = 500;
 const RENDER_TIMEOUT = { timeout: 15_000 };
 /* Longer than a second: a delta that spanned the wait would exceed 1. */
 const PAUSE_MS = 1100;
-const FRAMES_BEFORE_STEADY = 4;
+const SAMPLED_FRAMES = 4;
+/* A frame moves a scene by 0.1 s at most; the subtraction behind a delta may round a hair above it. */
+const FRAME_CAP_SECONDS = 0.1;
+const LARGEST_DELTA = FRAME_CAP_SECONDS + 1e-9;
+/* Five frames a second: every gap between two frames is longer than the cap. */
+const SLOW_DEVICE_FPS = 5;
+const GSAP_DEFAULT_FPS = 240;
 const DEVICE_PIXEL_RATIO = 3;
 const STAGE = { width: 240, height: 120 };
 
@@ -73,6 +79,10 @@ function frameSpy(): Mock<(delta: number) => void> {
   return vi.fn<(delta: number) => void>();
 }
 
+function deltasOf(onFrame: Mock<(delta: number) => void>): number[] {
+  return onFrame.mock.calls.map(([delta]) => delta);
+}
+
 async function renderThenLeaveWindow(onFrame: Mock<(delta: number) => void>) {
   const screen = await render(<Stage tier="full" onFrame={onFrame} spacer="300vh" />);
   const canvas = canvasOf(screen.container);
@@ -97,16 +107,33 @@ describe("StageCanvas", () => {
     await expect.poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT).toBeGreaterThan(0);
   });
 
-  it("reports every delta in seconds, the first one included, on a scene mounted late", async () => {
+  it("moves every frame by at most 0.1 s, the first one included, on a scene mounted late", async () => {
     await runTickerFor(PAUSE_MS);
     const onFrame = frameSpy();
     await render(<Stage tier="full" onFrame={onFrame} />);
 
     await expect
       .poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT)
-      .toBeGreaterThan(FRAMES_BEFORE_STEADY);
-    const deltas = onFrame.mock.calls.map(([delta]) => delta);
-    expect(Math.max(...deltas)).toBeLessThan(1);
+      .toBeGreaterThan(SAMPLED_FRAMES);
+    const deltas = deltasOf(onFrame);
+    expect(Math.min(...deltas)).toBeGreaterThan(0);
+    expect(Math.max(...deltas)).toBeLessThanOrEqual(LARGEST_DELTA);
+  });
+
+  it("keeps a slow device moving by 0.1 s a frame instead of freezing it", async () => {
+    gsap.ticker.fps(SLOW_DEVICE_FPS);
+    onTestFinished(() => {
+      gsap.ticker.fps(GSAP_DEFAULT_FPS);
+    });
+    const onFrame = frameSpy();
+    await render(<Stage tier="full" onFrame={onFrame} />);
+
+    await expect
+      .poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT)
+      .toBeGreaterThan(SAMPLED_FRAMES);
+    const deltas = deltasOf(onFrame);
+    expect(Math.min(...deltas)).toBeCloseTo(FRAME_CAP_SECONDS, 6);
+    expect(Math.max(...deltas)).toBeCloseTo(FRAME_CAP_SECONDS, 6);
   });
 
   it("renders no frame below the window and resumes once scrolled into view", async () => {
@@ -129,16 +156,18 @@ describe("StageCanvas", () => {
     expect(onFrame.mock.calls.length).toBe(framesWhenLeft);
   });
 
-  it("keeps the first delta under a second when the canvas returns to the window", async () => {
+  it("moves every frame by at most 0.1 s once the canvas returns to the window", async () => {
     const onFrame = frameSpy();
     const { canvas, framesWhenLeft } = await renderThenLeaveWindow(onFrame);
 
     canvas.scrollIntoView();
     await expect
       .poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT)
-      .toBeGreaterThan(framesWhenLeft);
+      .toBeGreaterThan(framesWhenLeft + SAMPLED_FRAMES);
 
-    expect(onFrame.mock.calls[framesWhenLeft]?.[0]).toBeLessThan(1);
+    const deltasBack = deltasOf(onFrame).slice(framesWhenLeft);
+    expect(Math.min(...deltasBack)).toBeGreaterThan(0);
+    expect(Math.max(...deltasBack)).toBeLessThanOrEqual(LARGEST_DELTA);
   });
 
   it("leaves the ticker when it unmounts", async () => {
