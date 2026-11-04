@@ -161,8 +161,6 @@ export function useSmoothedPointer(): Vector2 {
   }, [canvas, pointer]);
   return pointer;
 }
-
-/* Built imperatively: the material keeps this very uniforms object, while R3F's uniforms prop copies it. */
 ```
 
 ## `packages/ui/src/scene/<effect>-scene.tsx`
@@ -203,6 +201,7 @@ interface EffectPlaneProps extends SceneProps {
   posterAspect: number;
 }
 
+/* Built imperatively: the material keeps this very uniforms object, while R3F's uniforms prop copies it. */
 export function createEffect(pointer: Vector2, tier: QualityTier, posterAspect: number) {
   const uniforms = {
     uTime: { value: 0 },

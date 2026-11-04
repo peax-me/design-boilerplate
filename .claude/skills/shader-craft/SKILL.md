@@ -123,7 +123,7 @@ float flame(vec2 p, vec2 flow, float fromSource, float time) {
 // colour = ramp(pow(heat, 1.4)) * heat; only the core exceeds 1, so bloom touches the core alone
 ```
 
-**Plasma**: four sine fields, a light-tier stand-in for FBM.
+**Plasma**: four sine fields, a look of its own: smooth interfering bands, chosen for the design, never as a cheaper FBM on the light tier.
 
 ```glsl
 float plasma(vec2 p, float time) {

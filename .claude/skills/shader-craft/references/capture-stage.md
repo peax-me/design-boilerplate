@@ -8,13 +8,18 @@ Install it once per project:
 - Add `"capture-stage": "node scripts/capture-stage.ts"` to the `scripts` of `apps/web/package.json`: knip then counts the file as an entry. Living in `apps/web`, the script resolves `@playwright/test` from the package that depends on it.
 - Add `"scripts"` to the `include` of `apps/web/tsconfig.json`, so `pnpm typecheck` covers it.
 
-Run it against the local production server only (`exec` runs in `apps/web` and passes every argument through). The block waits for the server before capturing and stops it at the end; it runs the same under zsh and bash:
+Run it against the local production server only (`exec` runs in `apps/web` and passes every argument through). The block waits for the server before capturing (and gives up if the server stops or after two minutes), then stops it at the end; it runs the same under zsh and bash:
 
 ```bash
 pnpm --filter @repo/web build
 pnpm --filter @repo/web start --port 3100 &
 server=$!
-until curl -sf http://localhost:3100/ > /dev/null; do sleep 1; done
+waited=0
+until curl -sf http://localhost:3100/ > /dev/null; do
+  kill -0 "$server" 2> /dev/null || exit 1                # the server stopped: nothing to wait for
+  [ "$((waited += 1))" -le 120 ] || { kill "$server"; exit 1; }   # two minutes at most
+  sleep 1
+done
 pnpm --filter @repo/web exec node scripts/capture-stage.ts --url http://localhost:3100/<route> --stage 0 \
   --width 1440 --height 900 --output ../../assets/source/<feature>/<slot>/poster.png
 # a still plate inside a pinned ScrollScene: scroll there, then let the scrub settle in fake time
