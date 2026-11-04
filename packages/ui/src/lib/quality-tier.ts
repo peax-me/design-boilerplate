@@ -23,6 +23,14 @@ export function tierFor(profile: DeviceProfile): QualityTier | null {
   return "full";
 }
 
+/* The answer cannot change within a page: a scene asking again must not open another context. */
+let webgl2Supported: boolean | undefined;
+
+function supportsWebgl2(): boolean {
+  webgl2Supported ??= document.createElement("canvas").getContext("webgl2") !== null;
+  return webgl2Supported;
+}
+
 function matches(query: string): boolean {
   return window.matchMedia(query).matches;
 }
@@ -30,7 +38,7 @@ function matches(query: string): boolean {
 export function readDeviceProfile(): DeviceProfile {
   return {
     reducedMotion: matches("(prefers-reduced-motion: reduce)"),
-    webgl2: document.createElement("canvas").getContext("webgl2") !== null,
+    webgl2: supportsWebgl2(),
     narrow: !matches("(min-width: 48rem)"),
     coarsePointer: matches("(pointer: coarse)"),
   };

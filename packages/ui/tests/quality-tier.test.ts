@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  type DeviceProfile,
-  pixelRatio,
-  readDeviceProfile,
-  tierFor,
-} from "../src/lib/quality-tier.ts";
+import { type DeviceProfile, pixelRatio, tierFor } from "../src/lib/quality-tier.ts";
 
 const capableDesktop: DeviceProfile = {
   reducedMotion: false,
@@ -20,15 +15,24 @@ interface DeviceSignals {
 }
 
 /* The unit project runs in node: the window and the document are stubbed down to what the profile reads. */
-function stubDevice({ matchingQueries, webgl2 }: DeviceSignals): void {
+function stubDevice({ matchingQueries, webgl2 }: DeviceSignals) {
+  const createElement = vi.fn<(tag: string) => { getContext: (kind: string) => object | null }>(
+    (tag) => ({
+      getContext: (kind) => (tag === "canvas" && kind === "webgl2" && webgl2 ? {} : null),
+    }),
+  );
   vi.stubGlobal("window", {
     matchMedia: (query: string) => ({ matches: matchingQueries.includes(query) }),
   });
-  vi.stubGlobal("document", {
-    createElement: (tag: string) => ({
-      getContext: (kind: string) => (tag === "canvas" && kind === "webgl2" && webgl2 ? {} : null),
-    }),
-  });
+  vi.stubGlobal("document", { createElement });
+  return createElement;
+}
+
+/* The WebGL2 answer is kept for the page: every test loads its own copy of the module. */
+async function freshReadDeviceProfile(): Promise<() => DeviceProfile> {
+  vi.resetModules();
+  const { readDeviceProfile } = await import("../src/lib/quality-tier.ts");
+  return readDeviceProfile;
 }
 
 afterEach(() => {
@@ -58,11 +62,12 @@ describe("tierFor", () => {
 });
 
 describe("readDeviceProfile", () => {
-  it("reads a phone: narrow, coarse pointer, reduced motion, no WebGL2", () => {
+  it("reads a phone: narrow, coarse pointer, reduced motion, no WebGL2", async () => {
     stubDevice({
       matchingQueries: ["(prefers-reduced-motion: reduce)", "(pointer: coarse)"],
       webgl2: false,
     });
+    const readDeviceProfile = await freshReadDeviceProfile();
 
     expect(readDeviceProfile()).toStrictEqual({
       reducedMotion: true,
@@ -72,11 +77,25 @@ describe("readDeviceProfile", () => {
     });
   });
 
-  it("reads a desktop: wide, fine pointer, motion allowed, WebGL2", () => {
+  it("reads a desktop: wide, fine pointer, motion allowed, WebGL2", async () => {
     stubDevice({ matchingQueries: ["(min-width: 48rem)"], webgl2: true });
+    const readDeviceProfile = await freshReadDeviceProfile();
 
     expect(readDeviceProfile()).toStrictEqual(capableDesktop);
   });
+
+  it.each([true, false])(
+    "probes WebGL2 once per page when the answer is %s, however many scenes ask",
+    async (webgl2) => {
+      const createElement = stubDevice({ matchingQueries: [], webgl2 });
+      const readDeviceProfile = await freshReadDeviceProfile();
+
+      const answers = [readDeviceProfile(), readDeviceProfile(), readDeviceProfile()];
+
+      expect(answers.map((profile) => profile.webgl2)).toStrictEqual([webgl2, webgl2, webgl2]);
+      expect(createElement).toHaveBeenCalledTimes(1);
+    },
+  );
 });
 
 describe("pixelRatio", () => {
