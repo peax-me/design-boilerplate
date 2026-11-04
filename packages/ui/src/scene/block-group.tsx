@@ -146,10 +146,12 @@ interface BlockGroupProps {
   blocks: Block[];
   grain: string | undefined;
   host: HTMLElement;
+  /* Whether the canvas renders shadows: only then is there a ground to catch them. */
+  shadows: boolean;
   onReady: () => void;
 }
 
-export function BlockGroup({ blocks, grain, host, onReady }: BlockGroupProps) {
+export function BlockGroup({ blocks, grain, host, shadows, onReady }: BlockGroupProps) {
   const group = useRef<Group>(null);
   const meshes = useRef<Mesh[]>([]);
   const [onChange] = useState(() => () => {
@@ -176,10 +178,12 @@ export function BlockGroup({ blocks, grain, host, onReady }: BlockGroupProps) {
           }}
         />
       ))}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[200, 200]} />
-        <shadowMaterial opacity={0.22} />
-      </mesh>
+      {shadows ? (
+        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[200, 200]} />
+          <shadowMaterial opacity={0.22} />
+        </mesh>
+      ) : null}
     </group>
   );
 }

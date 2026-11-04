@@ -16,10 +16,11 @@ interface BlockSceneProps extends SceneProps {
 
 export function BlockScene({ blocks, grain, tier, onReady, className }: BlockSceneProps) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const shadows = tier === "full";
   return (
     <div ref={setHost} className={className}>
       {host === null ? null : (
-        <StageCanvas tier={tier} flat shadows={tier === "full"}>
+        <StageCanvas tier={tier} flat shadows={shadows}>
           <IsometricCamera blocks={blocks} bleed={-host.offsetLeft} />
           <ambientLight intensity={2} />
           <directionalLight
@@ -30,7 +31,13 @@ export function BlockScene({ blocks, grain, tier, onReady, className }: BlockSce
           >
             <orthographicCamera attach="shadow-camera" args={[-30, 30, 30, -30, 0.1, 100]} />
           </directionalLight>
-          <BlockGroup blocks={blocks} grain={grain} host={host} onReady={onReady} />
+          <BlockGroup
+            blocks={blocks}
+            grain={grain}
+            host={host}
+            shadows={shadows}
+            onReady={onReady}
+          />
         </StageCanvas>
       )}
     </div>
