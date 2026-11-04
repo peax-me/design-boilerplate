@@ -1,8 +1,14 @@
 import { useFrame } from "@react-three/fiber";
 import { lazy, useRef } from "react";
 
+import type { Block } from "../../src/lib/isometric.ts";
 import type { SceneProps } from "../../src/motion/stage.tsx";
 import { StageCanvas } from "../../src/scene/stage-canvas.tsx";
+
+/* The same box drawn flat, for a poster. */
+export const plainBox: Block[] = [
+  { id: "box", x: 0, y: 0, z: 0, width: 2, depth: 2, height: 2, material: "paper" },
+];
 
 /* Turned a little so the box reads as a volume. */
 const TURN: [number, number, number] = [0.5, 0.6, 0];

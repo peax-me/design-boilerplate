@@ -2,13 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect } from "storybook/test";
 
 import { IsoBlocks } from "../src/components/iso-blocks.tsx";
-import type { Block } from "../src/lib/isometric.ts";
 import { Stage } from "../src/motion/stage.tsx";
-import { plainScene } from "./support/plain-scene.tsx";
-
-const box: Block[] = [
-  { id: "box", x: 0, y: 0, z: 0, width: 2, depth: 2, height: 2, material: "paper" },
-];
+import { plainBox, plainScene } from "./support/plain-scene.tsx";
 
 const meta = {
   title: "Motion/Stage",
@@ -22,7 +17,7 @@ const meta = {
     },
   },
   args: {
-    poster: <IsoBlocks blocks={box} label="A plain box" />,
+    poster: <IsoBlocks blocks={plainBox} label="A plain box" />,
     renderScene: plainScene,
     className: "max-w-xl",
   },

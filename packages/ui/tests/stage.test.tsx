@@ -1,8 +1,10 @@
 import "../src/styles/globals.css";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type ComponentType, lazy } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 
+import type { SceneProps } from "../src/motion/stage.tsx";
 import { afterIdle, BoxStage, stageAt } from "./support/box-stage.tsx";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 
@@ -12,12 +14,49 @@ const DESKTOP = { width: 1280, height: 800 };
 const LIVE_TIMEOUT = { timeout: 15_000 };
 const INTERACTIONS = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const;
 
+const renderFailure = new Error("The scene failed to render");
+const loadFailure = new Error("The scene module failed to load");
+
+function BrokenScene(): never {
+  throw renderFailure;
+}
+
+const UnloadableScene = lazy<ComponentType<SceneProps>>(() => Promise.reject(loadFailure));
+
+const SCENE_FAILURES = [
+  {
+    failure: "throws while rendering",
+    error: renderFailure,
+    renderScene: () => <BrokenScene />,
+  },
+  {
+    failure: "fails to load",
+    error: loadFailure,
+    renderScene: (scene: SceneProps) => <UnloadableScene {...scene} />,
+  },
+];
+
 function canvasIn(element: HTMLElement): HTMLCanvasElement | null {
   return element.querySelector("canvas");
 }
 
+function sceneLayerIn(stage: HTMLElement): Element | null {
+  return stage.querySelector(":scope > [aria-hidden]");
+}
+
 function tierIn(element: HTMLElement): string | undefined {
   return element.querySelector<HTMLElement>("[data-tier]")?.dataset["tier"];
+}
+
+/* Keeps the page's idle callbacks until the returned function runs them. */
+function holdIdleCallbacks(): () => void {
+  const held: IdleRequestCallback[] = [];
+  vi.spyOn(window, "requestIdleCallback").mockImplementation((task) => held.push(task));
+  return () => {
+    for (const task of held.splice(0)) {
+      task({ didTimeout: false, timeRemaining: () => 0 });
+    }
+  };
 }
 
 async function renderLive(name: string) {
@@ -32,6 +71,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await allowMotion();
   window.scrollTo(0, 0);
 });
@@ -69,6 +109,19 @@ describe("Stage", () => {
       expect(tierIn(stage)).toBe("light");
     },
   );
+
+  it("keeps an interaction made on a phone before the page was idle", async () => {
+    const releaseIdleCallbacks = holdIdleCallbacks();
+    await page.viewport(PHONE.width, PHONE.height);
+    const screen = await render(<BoxStage name="Early box" />);
+    const stage = stageAt(screen.container);
+
+    window.dispatchEvent(new Event("scroll"));
+    releaseIdleCallbacks();
+
+    await expect.poll(() => stage.dataset["stage"], LIVE_TIMEOUT).toBe("live");
+    expect(tierIn(stage)).toBe("light");
+  });
 
   it("loads only the stages near the window, the others once scrolled to", async () => {
     const screen = await render(
@@ -108,6 +161,22 @@ describe("Stage", () => {
     await expect.poll(() => stage.dataset["stage"]).toBe("poster");
     expect(canvasIn(stage)).toBeNull();
   });
+
+  it.each(SCENE_FAILURES)(
+    "brings the poster back when the scene $failure",
+    async ({ error, renderScene }) => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn<() => void>());
+      const screen = await render(<BoxStage name="Failing box" renderScene={renderScene} />);
+      const stage = stageAt(screen.container);
+
+      await expect
+        .poll((): unknown[] => consoleError.mock.calls.flat(), LIVE_TIMEOUT)
+        .toContain(error);
+      await expect.poll(() => sceneLayerIn(stage)).toBeNull();
+      expect(stage.dataset["stage"]).toBe("poster");
+      await expect.element(screen.getByRole("img", { name: "Failing box" })).toBeVisible();
+    },
+  );
 
   it("brings the poster back when reduced motion is turned on", async () => {
     const stage = await renderLive("Calmed box");

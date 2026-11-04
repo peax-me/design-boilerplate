@@ -13,6 +13,7 @@ import {
 import { cn } from "../lib/cn.ts";
 import { whenIdle } from "../lib/idle.ts";
 import { type QualityTier, readDeviceProfile, tierFor } from "../lib/quality-tier.ts";
+import { SceneBoundary } from "../scene/scene-boundary.tsx";
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 /* A scene loads once it comes within half a window height of the viewport. */
@@ -69,13 +70,11 @@ function useNearWindow(root: HTMLElement | null, watching: boolean): boolean {
   return near;
 }
 
-function useFirstInteraction(watching: boolean): boolean {
+/* Listened from mount: a visitor who scrolls while the page loads, then stops, has already interacted. */
+function useFirstInteraction(): boolean {
   const [interacted, setInteracted] = useState(false);
 
-  useEffect((): EffectCleanup => {
-    if (!watching) {
-      return undefined;
-    }
+  useEffect(() => {
     const listening = new AbortController();
     function interact(): void {
       setInteracted(true);
@@ -87,23 +86,23 @@ function useFirstInteraction(watching: boolean): boolean {
     return () => {
       listening.abort();
     };
-  }, [watching]);
+  }, []);
 
   return interacted;
 }
 
-/* Once the context is lost or motion is reduced, the poster stays for the life of the page. */
-function usePosterFallback(root: HTMLElement | null): boolean {
+/* Once the scene fails, its context is lost or motion is reduced, the poster stays for the life of the page. */
+function usePosterFallback(root: HTMLElement | null): [fellBack: boolean, fallBack: () => void] {
   const [fellBack, setFellBack] = useState(false);
+  const fallBack = useCallback(() => {
+    setFellBack(true);
+  }, []);
 
   useEffect((): EffectCleanup => {
     if (root === null) {
       return undefined;
     }
     const listening = new AbortController();
-    function fallBack(): void {
-      setFellBack(true);
-    }
     /* A lost context does not bubble: only the capture phase reaches the root. */
     root.addEventListener("webglcontextlost", fallBack, {
       capture: true,
@@ -121,19 +120,18 @@ function usePosterFallback(root: HTMLElement | null): boolean {
     return () => {
       listening.abort();
     };
-  }, [root]);
+  }, [root, fallBack]);
 
-  return fellBack;
+  return [fellBack, fallBack];
 }
 
 /* The tier to run the scene at once every trigger has fired: the page is idle, the device can run a scene, the stage nears the window and, on light devices, the visitor has interacted. */
 function useSceneTier(root: HTMLElement | null): QualityTier | null {
   const tier = useIdleTier();
   const near = useNearWindow(root, tier !== null);
-  const interacted = useFirstInteraction(tier === "light");
-  const fellBack = usePosterFallback(root);
+  const interacted = useFirstInteraction();
 
-  if (tier === null || !near || fellBack) {
+  if (tier === null || !near) {
     return null;
   }
   if (tier === "light" && !interacted) {
@@ -168,7 +166,9 @@ export function Stage({
   const onReady = useCallback(() => {
     setReady(true);
   }, []);
-  const tier = useSceneTier(root);
+  const triggeredTier = useSceneTier(root);
+  const [fellBack, fallBack] = usePosterFallback(root);
+  const tier = fellBack ? null : triggeredTier;
   const live = tier !== null && ready;
 
   return (
@@ -182,7 +182,9 @@ export function Stage({
       <div className={fadeVariants({ shown: !live })}>{poster}</div>
       {tier === null ? null : (
         <div aria-hidden className={cn("absolute inset-0", fadeVariants({ shown: live }))}>
-          <Suspense fallback={null}>{renderScene({ tier, onReady })}</Suspense>
+          <SceneBoundary onError={fallBack}>
+            <Suspense fallback={null}>{renderScene({ tier, onReady })}</Suspense>
+          </SceneBoundary>
         </div>
       )}
     </div>

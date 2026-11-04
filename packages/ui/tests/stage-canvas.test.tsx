@@ -5,6 +5,7 @@ import { render } from "vitest-browser-react";
 
 import type { QualityTier } from "../src/lib/quality-tier.ts";
 import { StageCanvas } from "../src/scene/stage-canvas.tsx";
+import { pause } from "./support/pause.ts";
 
 const SETTLE_MS = 500;
 /* The first frame waits for a WebGL context, slower when many browsers share the machine. */
@@ -59,12 +60,6 @@ function canvasOf(container: HTMLElement): HTMLCanvasElement {
     throw new Error("The stage has no canvas");
   }
   return canvas;
-}
-
-function pause(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 /* The GSAP ticker sleeps with no listener and its time stands still: another animation keeps it running, as on a real page. */
