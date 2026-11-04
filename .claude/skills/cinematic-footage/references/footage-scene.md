@@ -1,32 +1,58 @@
 # Footage scene
 
-Four modules that typecheck, lint and format as written in this repository, run in a browser (Vitest browser mode, the package's own set-up) on two short AVIF sequences: frames load coarse to fine (`0, 11, 8, 4, 2, 6, 10, 1, …` for 12 frames), the first frame draws upright, mid-scroll the next shot has burnt through 43 % of the frame along a lit seam, and the last shot ends complete. The scrubber was run on an all-intra MP4: four quick seeks landed on the last target, and the texture changed after `seeked`.
+Four modules that typecheck, lint and format as written in this repository, run in a browser (Vitest browser mode, the package's own set-up) on three short AVIF shots and an all-intra MP4:
 
-Rename `footage` to the effect's name. The effect component composes `Stage` like any effect (`shader-craft` `references/effect-skeleton.md`) and, inside `renderScene` (client-only, after the stage's triggers), picks the frame set by the stage's orientation and passes `shots`, `frameAspect` and `progress`:
+- The first frame draws upright, from the frame the poster shows.
+- One load queue serves the whole stage: never more than 6 requests in flight, every shot's coarse frames first (`a/0001 a/0009 a/0012 b/0001 b/0009 b/0012 c/0001 …`), then the frames closest to the playhead.
+- Decoded bitmaps stay at 8 for the stage (9 alive counting the first frame's), across a walk through all three shots.
+- With decoding slowed to 1.5 s, a jump straight into a dissolve showed no pixel of the next shot and no black pixel until its first frame was on the texture; then the dissolve ran. No capture of the walk had a black pixel.
+- The clip draws its first frame at once (suspended until `loadeddata`), lands its coalesced seeks on the latest target, and releases its video after unmount.
 
-```tsx
-renderScene={(scene) => {
-  const portrait = window.matchMedia("(orientation: portrait)").matches;
-  return (
-    <LazyFootageScene
-      {...scene}
-      progress={progress}
-      shots={portrait ? portraitShots : landscapeShots}
-      frameAspect={portrait ? 506 / 900 : 1600 / 900}
-    />
+Shared GLSL comes from `shader-chunks.ts` (`shader-craft` `references/shader-chunks.md`): these modules import it, never copy it. Rename `footage` to the effect's name.
+
+## `apps/web/src/features/<feature>/<slot>-frames.ts`
+
+The app builds the URLs, with the base path of the static export. The first landscape frame is the poster's own URL, so one download serves both: that frame is not written to `public/media`.
+
+```ts
+import poster from "./images/<slot>-poster.avif";
+
+const MEDIA = `${process.env.NEXT_PUBLIC_BASE_PATH}/media/<feature>`;
+
+/* Frame URLs of one shot: 0001.avif, 0002.avif… in the shot's folder, or in its portrait crop. */
+function frames(shot: string, count: number, crop: "" | "/portrait" = ""): string[] {
+  return Array.from(
+    { length: count },
+    (_, index) => `${MEDIA}/${shot}${crop}/${String(index + 1).padStart(4, "0")}.avif`,
   );
-}}
+}
+
+/* The poster is frame 0001 of the first landscape shot: the scene loads it from the same URL, so it downloads once. */
+export const journeyShots = {
+  landscape: [
+    [poster.src, ...frames("dive", 50).slice(1)],
+    frames("rise", 50),
+    frames("clouds", 50),
+  ],
+  portrait: [
+    frames("dive", 50, "/portrait"),
+    frames("rise", 50, "/portrait"),
+    frames("clouds", 50, "/portrait"),
+  ],
+};
 ```
 
-The app builds the URLs with `process.env.NEXT_PUBLIC_BASE_PATH` (`${base}/media/<feature>/<slot>/${String(index + 1).padStart(4, "0")}.avif`).
+The effect component composes `Stage` like any effect (`shader-craft` `references/effect-skeleton.md`, `fit="cover"` for a full-bleed hero) and passes `shots` and `progress` to the lazy scene inside `renderScene`.
 
 ## `packages/ui/src/scene/<effect>-frames.ts`
 
 ```ts
-/* Frames load several at a time, at low priority: the page's own requests go first. */
+/* One stage loads at most this many frames at a time, at low priority: the page's own requests go first. */
 const LOAD_CONCURRENCY = 6;
-/* Decoded frames kept around the playhead: a 1600×900 frame is 5.8 MB once decoded, the compressed one about 40 KB. */
+/* Decoded frames kept for the whole stage: a 1600×900 frame is 5.8 MB once decoded, about 40 KB compressed. */
 const DECODED_FRAMES = 8;
+/* Every 8th frame of every shot, and each shot's last, load before the rest: the whole scrub works early. */
+const COARSE_STRIDE = 8;
 /* The share of each shot's scroll during which the next shot dissolves in. */
 const DISSOLVE_SHARE = 0.2;
 
@@ -35,68 +61,117 @@ export interface Frame {
   bitmap: ImageBitmap;
 }
 
+/* Every frame of every shot in one list: shot k owns the indices from starts[k] to starts[k + 1] - 1. */
 export interface FrameStore {
+  urls: string[];
+  starts: number[];
   blobs: Array<Blob | undefined>;
+  requested: Set<number>;
   decoded: Map<number, ImageBitmap>;
   decoding: Set<number>;
+  /* The frame the scroll shows, and the next shot's first frame once it is being prepared: never evicted. */
+  playhead: number;
+  prepared: number | undefined;
 }
 
 export interface Placement {
   shot: number;
   frame: number;
+  local: number;
   dissolve: number;
 }
 
-/* Both ends first, then every 2^k-th frame down to every frame: the scrub works at once and sharpens as it loads. */
-export function coarseToFine(count: number): number[] {
-  const order = new Set([0, count - 1]);
-  for (let stride = 2 ** Math.floor(Math.log2(Math.max(count - 1, 1))); stride >= 1; stride /= 2) {
-    for (let index = 0; index < count; index += stride) {
-      order.add(index);
-    }
-  }
-  return [...order];
+function shotOf(store: FrameStore, index: number): number {
+  return store.starts.findLastIndex((start) => start <= index);
 }
 
-export function loadFrames(urls: string[], signal: AbortSignal): FrameStore {
-  const blobs: Array<Blob | undefined> = Array.from({ length: urls.length });
-  const queue = coarseToFine(urls.length);
+function shotEnd(store: FrameStore, shot: number): number {
+  return (store.starts[shot + 1] ?? store.urls.length) - 1;
+}
+
+function isCoarse(store: FrameStore, index: number): boolean {
+  const shot = shotOf(store, index);
+  return (
+    (index - (store.starts[shot] ?? 0)) % COARSE_STRIDE === 0 || index === shotEnd(store, shot)
+  );
+}
+
+/* Coarse frames first, then the closest to the playhead: the order follows the visitor as they scroll. */
+function nextToLoad(store: FrameStore): number | undefined {
+  let best: number | undefined;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < store.urls.length; index += 1) {
+    const score =
+      (isCoarse(store, index) ? 0 : store.urls.length) + Math.abs(index - store.playhead);
+    if (!store.requested.has(index) && score < bestScore) {
+      best = index;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+export function createFrameStore(shots: string[][], signal: AbortSignal): FrameStore {
+  const starts = shots.map((_, shot) =>
+    shots.slice(0, shot).reduce((sum, urls) => sum + urls.length, 0),
+  );
+  const urls = shots.flat();
+  const store: FrameStore = {
+    urls,
+    starts,
+    blobs: Array.from({ length: urls.length }),
+    requested: new Set(),
+    decoded: new Map(),
+    decoding: new Set(),
+    playhead: 0,
+    prepared: undefined,
+  };
   async function work(): Promise<void> {
-    for (let index = queue.shift(); index !== undefined; index = queue.shift()) {
-      // oxlint-disable-next-line no-await-in-loop -- each worker fetches one frame at a time, in coarse-to-fine order.
-      const response = await fetch(urls[index] ?? "", { signal, priority: "low" });
-      // oxlint-disable-next-line no-await-in-loop -- same worker: the body is read before the next request.
-      blobs[index] = await response.blob();
+    for (let index = nextToLoad(store); index !== undefined; index = nextToLoad(store)) {
+      store.requested.add(index);
+      // oxlint-disable-next-line no-await-in-loop -- each worker fetches one frame at a time, the closest still missing.
+      const response = await fetch(store.urls[index] ?? "", { signal, priority: "low" });
+      // oxlint-disable-next-line no-await-in-loop -- same worker: the body is read before the next pick.
+      store.blobs[index] = await response.blob();
     }
   }
   /* Aborted on unmount; a frame that fails stays missing and its neighbours stand in. */
   Promise.all(Array.from({ length: LOAD_CONCURRENCY }, work)).catch(() => null);
-  return { blobs, decoded: new Map(), decoding: new Set() };
+  return store;
 }
 
-function nearest(
-  index: number,
-  has: (candidate: number) => boolean,
-  count: number,
+/* Closest index to target inside one shot that passes the test. */
+function nearestInShot(
+  store: FrameStore,
+  target: number,
+  has: (index: number) => boolean,
 ): number | undefined {
-  for (let offset = 0; offset < count; offset += 1) {
-    if (has(index - offset)) {
-      return index - offset;
+  const shot = shotOf(store, target);
+  const first = store.starts[shot] ?? 0;
+  const last = shotEnd(store, shot);
+  for (let offset = 0; offset <= last - first; offset += 1) {
+    if (target - offset >= first && has(target - offset)) {
+      return target - offset;
     }
-    if (has(index + offset)) {
-      return index + offset;
+    if (target + offset <= last && has(target + offset)) {
+      return target + offset;
     }
   }
   return undefined;
 }
 
-function keepAround(store: FrameStore, index: number): void {
-  const farthest = [...store.decoded.keys()].toSorted(
-    (first, second) => Math.abs(second - index) - Math.abs(first - index),
-  );
-  for (const evicted of farthest.slice(0, Math.max(store.decoded.size - DECODED_FRAMES, 0))) {
-    store.decoded.get(evicted)?.close();
-    store.decoded.delete(evicted);
+/* The stage keeps DECODED_FRAMES bitmaps, the farthest from the playhead go first; the playhead and the
+   prepared frame stay. A bitmap already uploaded to a texture can close: the GPU keeps its copy. */
+function evict(store: FrameStore): void {
+  const kept = new Set([store.playhead, store.prepared]);
+  const farthest = [...store.decoded.keys()]
+    .filter((index) => !kept.has(index))
+    .toSorted(
+      (first, second) => Math.abs(second - store.playhead) - Math.abs(first - store.playhead),
+    );
+  for (const index of farthest.slice(0, Math.max(store.decoded.size - DECODED_FRAMES, 0))) {
+    store.decoded.get(index)?.close();
+    store.decoded.delete(index);
   }
 }
 
@@ -109,16 +184,15 @@ async function decode(store: FrameStore, index: number, blob: Blob): Promise<voi
       premultiplyAlpha: "none",
     });
     store.decoded.set(index, bitmap);
-    keepAround(store, index);
+    evict(store);
   } finally {
     store.decoding.delete(index);
   }
 }
 
-/* The closest decoded frame to the playhead, while the exact one decodes off the main thread. */
-export function frameAt(store: FrameStore, index: number): Frame | undefined {
-  const count = store.blobs.length;
-  const source = nearest(index, (candidate) => store.blobs[candidate] !== undefined, count);
+/* The closest decoded frame of the target's shot, while the exact one decodes. */
+export function frameAt(store: FrameStore, target: number): Frame | undefined {
+  const source = nearestInShot(store, target, (index) => store.blobs[index] !== undefined);
   const blob = source === undefined ? undefined : store.blobs[source];
   if (
     source !== undefined &&
@@ -130,7 +204,7 @@ export function frameAt(store: FrameStore, index: number): Frame | undefined {
       store.decoding.delete(source);
     });
   }
-  const shown = nearest(index, (candidate) => store.decoded.has(candidate), count);
+  const shown = nearestInShot(store, target, (index) => store.decoded.has(index));
   const bitmap = shown === undefined ? undefined : store.decoded.get(shown);
   return shown === undefined || bitmap === undefined ? undefined : { index: shown, bitmap };
 }
@@ -140,25 +214,31 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/* Each shot owns an equal part of the progress; the end of each part but the last dissolves into the next shot. */
-export function place(progress: number, frameCounts: readonly number[]): Placement {
-  const shots = frameCounts.length;
+/* Each shot owns an equal part of the progress; the end of each part but the last dissolves into the next shot.
+   frame is a store index: starts[shot] plus the frame inside the shot. */
+export function place(progress: number, store: FrameStore): Placement {
+  const shots = store.starts.length;
   const scaled = Math.min(Math.max(progress, 0), 1) * shots;
   const shot = Math.min(Math.floor(scaled), shots - 1);
   const local = scaled - shot;
-  const frames = frameCounts[shot] ?? 1;
+  const first = store.starts[shot] ?? 0;
   const dissolve = shot < shots - 1 ? smoothstep(1 - DISSOLVE_SHARE, 1, local) : 0;
-  return { shot, frame: Math.round(local * (frames - 1)), dissolve };
+  return {
+    shot,
+    frame: first + Math.round(local * (shotEnd(store, shot) - first)),
+    local,
+    dissolve,
+  };
 }
 ```
 
 ## `packages/ui/src/scene/<effect>-shaders.ts`
 
 ```ts
-export const FULL_SCREEN = `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+import { COVER_UV, FBM, GRADIENT_NOISE, HASH } from "./shader-chunks.ts";
 
-/* Two shots crossed by a noise threshold: the next shot burns through the current one along an organic edge.
-   PCG hash (Jarzynski and Olano, JCGT 2020), gradient noise and coverUv as in the shader-craft recipes. */
+/* Two shots crossed by a noise threshold: the next shot burns through the current one along an organic edge,
+   refracted and lit where they meet. */
 export const DISSOLVE_FRAGMENT = `
   #define OCTAVES 4
   uniform sampler2D uShotA;
@@ -168,46 +248,10 @@ export const DISSOLVE_FRAGMENT = `
   uniform vec2 uResolution;
   uniform float uFrameAspect;
 
-  uint pcg(uint value) {
-    uint state = value * 747796405u + 2891336453u;
-    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-  }
-  float hash(ivec2 cell) {
-    return float(pcg(uint(cell.x) + pcg(uint(cell.y)))) / 4294967295.0;
-  }
-  vec2 gradientAt(ivec2 cell) {
-    float angle = 6.2831853 * hash(cell);
-    return vec2(cos(angle), sin(angle));
-  }
-  float gradientNoise(vec2 p) {
-    ivec2 cell = ivec2(floor(p));
-    vec2 f = fract(p);
-    vec2 fade = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    float a = dot(gradientAt(cell), f);
-    float b = dot(gradientAt(cell + ivec2(1, 0)), f - vec2(1.0, 0.0));
-    float c = dot(gradientAt(cell + ivec2(0, 1)), f - vec2(0.0, 1.0));
-    float d = dot(gradientAt(cell + ivec2(1, 1)), f - vec2(1.0, 1.0));
-    return mix(mix(a, b, fade.x), mix(c, d, fade.x), fade.y);
-  }
-  float fbm(vec2 p) {
-    const mat2 turn = mat2(0.8, 0.6, -0.6, 0.8);
-    float sum = 0.0;
-    float amplitude = 0.5;
-    for (int octave = 0; octave < OCTAVES; octave++) {
-      sum += amplitude * gradientNoise(p);
-      p = turn * p * 2.03;
-      amplitude *= 0.5;
-    }
-    return sum;
-  }
-  vec2 coverUv(vec2 fragCoord, vec2 resolution, float posterAspect) {
-    float canvasAspect = resolution.x / resolution.y;
-    vec2 scale = canvasAspect > posterAspect
-      ? vec2(1.0, posterAspect / canvasAspect)
-      : vec2(canvasAspect / posterAspect, 1.0);
-    return (fragCoord / resolution - 0.5) * scale + 0.5;
-  }
+  ${HASH}
+  ${GRADIENT_NOISE}
+  ${FBM}
+  ${COVER_UV}
 
   void main() {
     vec2 uv = coverUv(gl_FragCoord.xy, uResolution, uFrameAspect);
@@ -231,7 +275,7 @@ export const DISSOLVE_FRAGMENT = `
 ```tsx
 "use client";
 
-import { useFrame, useLoader } from "@react-three/fiber";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { useEffect, useState } from "react";
 import {
   ImageBitmapLoader,
@@ -243,18 +287,23 @@ import {
 } from "three";
 
 import type { SceneProps } from "../motion/stage.tsx";
-import { type Frame, type FrameStore, frameAt, loadFrames, place } from "./footage-frames.ts";
-import { DISSOLVE_FRAGMENT, FULL_SCREEN } from "./footage-shaders.ts";
+import { createFrameStore, type Frame, type FrameStore, frameAt, place } from "./footage-frames.ts";
+import { DISSOLVE_FRAGMENT } from "./footage-shaders.ts";
+import { FULL_SCREEN } from "./shader-chunks.ts";
 import { StageCanvas } from "./stage-canvas.tsx";
 import { useFirstFrame } from "./use-first-frame.ts";
 
+/* From this far into a shot, the next shot's first frame is decoded and waiting on the second texture. */
+const PREPARE_NEXT_FROM = 0.5;
+
+type Orientation = "landscape" | "portrait";
+
 interface FootageSceneProps extends SceneProps {
-  /* Frame URLs of each shot, in story order, for the stage's orientation, built by the app with NEXT_PUBLIC_BASE_PATH. */
-  shots: string[][];
+  /* Frame URLs of each shot in story order, for both crops, built by the app with NEXT_PUBLIC_BASE_PATH.
+     The first landscape frame is the poster's own URL (its static import's src): one download serves both. */
+  shots: Record<Orientation, string[][]>;
   /* Tweened from 0 to 1 by the page's ScrollScene choreography. */
   progress: { value: number };
-  /* Width over height of the frames: the canvas covers like the poster does. */
-  frameAspect: number;
 }
 
 /* Frames arrive flipped from decoding; no mipmaps, so a frame change is one upload. */
@@ -271,14 +320,14 @@ function frameTexture(image?: ImageBitmap): Texture<ImageBitmap | undefined> {
 }
 
 /* Built imperatively: the material keeps this very uniforms object, while R3F's uniforms prop copies it. */
-function createFootage(first: ImageBitmap, frameAspect: number) {
+function createFootage(first: ImageBitmap) {
   const uniforms = {
     uShotA: { value: frameTexture(first) },
     uShotB: { value: frameTexture() },
     uDissolve: { value: 0 },
     uTime: { value: 0 },
     uResolution: { value: new Vector2() },
-    uFrameAspect: { value: frameAspect },
+    uFrameAspect: { value: first.width / first.height },
   };
   const material = new ShaderMaterial({
     uniforms,
@@ -297,50 +346,57 @@ function show(texture: Texture<ImageBitmap | undefined>, frame: Frame | undefine
   Object.assign(texture, { image: frame.bitmap, needsUpdate: true });
 }
 
-/* Mutations live outside the component: the React Compiler lint rejects writing to hook values in useFrame. */
+/* Mutations live outside the component: the React Compiler lint rejects writing to hook values in useFrame.
+   The dissolve stays at 0 until the second texture holds the next shot's first frame: no black, no stale frame. */
 function advance(
   footage: FootageState,
-  stores: FrameStore[],
+  store: FrameStore,
   frame: { delta: number; progress: number },
 ): void {
   const { uShotA, uShotB, uDissolve, uTime } = footage.uniforms;
-  const placement = place(
-    frame.progress,
-    stores.map((store) => store.blobs.length),
-  );
-  const current = stores[placement.shot];
-  const next = stores[placement.shot + 1];
-  show(uShotA.value, current === undefined ? undefined : frameAt(current, placement.frame));
-  if (placement.dissolve > 0 && next !== undefined) {
-    show(uShotB.value, frameAt(next, 0));
+  const placement = place(frame.progress, store);
+  const next = store.starts[placement.shot + 1];
+  const prepared = next !== undefined && placement.local >= PREPARE_NEXT_FROM ? next : undefined;
+  Object.assign(store, { playhead: placement.frame, prepared });
+  show(uShotA.value, frameAt(store, placement.frame));
+  const waiting = prepared === undefined ? undefined : frameAt(store, prepared);
+  const ready = waiting !== undefined && waiting.index === prepared;
+  if (ready) {
+    show(uShotB.value, waiting);
   }
-  uDissolve.value = placement.dissolve;
+  uDissolve.value = ready ? placement.dissolve : 0;
   uTime.value += frame.delta;
 }
 
-function FootagePlane({ onReady, shots, progress, frameAspect }: Omit<FootageSceneProps, "tier">) {
+function FootagePlane({ onReady, shots, progress }: Omit<FootageSceneProps, "tier">) {
+  /* The crop follows the stage's own box at mount, not the window or the tier. */
+  const size = useThree((state) => state.size);
+  const [orientation] = useState<Orientation>(() =>
+    size.height > size.width ? "portrait" : "landscape",
+  );
+  const chosen = shots[orientation];
   /* Suspends until the first frame is decoded: the scene's first frame is the poster's frame. */
-  const first = useLoader(ImageBitmapLoader, shots[0]?.[0] ?? "", (loader) => {
+  const first = useLoader(ImageBitmapLoader, chosen[0]?.[0] ?? "", (loader) => {
     loader.setOptions({ imageOrientation: "flipY", premultiplyAlpha: "none" });
   });
-  const [footage] = useState(() => createFootage(first, frameAspect));
+  const [footage] = useState(() => createFootage(first));
   const [loading] = useState(() => new AbortController());
-  const [stores] = useState(() => shots.map((urls) => loadFrames(urls, loading.signal)));
+  const [store] = useState(() => createFrameStore(chosen, loading.signal));
   useEffect(
     () => () => {
       loading.abort();
       footage.material.dispose();
       footage.uniforms.uShotA.value.dispose();
       footage.uniforms.uShotB.value.dispose();
-      for (const bitmap of stores.flatMap((store) => [...store.decoded.values()])) {
+      for (const bitmap of store.decoded.values()) {
         bitmap.close();
       }
     },
-    [footage, loading, stores],
+    [footage, loading, store],
   );
   useFirstFrame(onReady);
   useFrame((state, delta) => {
-    advance(footage, stores, { delta, progress: progress.value });
+    advance(footage, store, { delta, progress: progress.value });
     state.gl.getDrawingBufferSize(footage.uniforms.uResolution.value);
   });
   return (
@@ -359,38 +415,46 @@ export function FootageScene({ tier, ...footage }: FootageSceneProps) {
 }
 ```
 
-## `packages/ui/src/scene/<effect>-scrubber.ts` (beyond 150 frames)
+## `packages/ui/src/scene/<effect>-clip.ts` (beyond 150 frames)
 
-Replace the frame store with this when a shot needs more than 150 frames: the scene's `uShotA` becomes `scrubber.texture`, and `advance` calls `seek(placement local progress × duration)` instead of `frameAt`.
+For a shot past 150 frames, the scene reads `const clip = use(loadClip(url))` instead of a frame store: it suspends until the first frame is decoded, then `advance` calls `clip.seek(local × clip.duration)` and the material samples `clip.texture`. Dispose the clip in the scene's unmount effect.
 
 ```ts
 import { LinearFilter, VideoTexture } from "three";
 
+/* Closer than this, a seek would land on the frame already shown. */
+const SAME_TIME = 0.001;
+
+export interface Clip {
+  texture: VideoTexture;
+  duration: number;
+  seek: (time: number) => void;
+  dispose: () => void;
+}
+
+const clips = new Map<string, Promise<Clip>>();
+
 /* An all-intra clip (every frame a keyframe) scrubbed by seeking: one seek at a time, always to the latest target,
    because queued seeks make the picture trail the scroll. The texture updates when a seek lands. */
-export function createScrubber(url: string): {
-  texture: VideoTexture;
-  seek: (time: number) => void;
-} {
-  const video = Object.assign(document.createElement("video"), {
-    muted: true,
-    playsInline: true,
-    preload: "auto",
-    src: url,
-  });
+function createClip(url: string, video: HTMLVideoElement): Clip {
   const texture = Object.assign(new VideoTexture(video), {
     minFilter: LinearFilter,
     generateMipmaps: false,
+    needsUpdate: true,
   });
   let seeking = false;
   let target: number | undefined;
   function seek(time: number): void {
+    const clamped = Math.min(Math.max(time, 0), video.duration - SAME_TIME);
     if (seeking) {
-      target = time;
+      target = clamped;
+      return;
+    }
+    if (!Number.isFinite(clamped) || Math.abs(clamped - video.currentTime) < SAME_TIME) {
       return;
     }
     seeking = true;
-    video.currentTime = time;
+    Object.assign(video, { currentTime: clamped });
   }
   video.addEventListener("seeked", () => {
     texture.needsUpdate = true;
@@ -401,15 +465,48 @@ export function createScrubber(url: string): {
       seek(next);
     }
   });
-  return { texture, seek };
+  function dispose(): void {
+    clips.delete(url);
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    texture.dispose();
+  }
+  return { texture, duration: video.duration, seek, dispose };
+}
+
+/* Resolves at loadeddata: the duration is known and the first frame decoded, so a scene that suspends on it
+   (React's use) never fades in black, and every seek fires seeked. Cached by URL, as use() requires. */
+export function loadClip(url: string): Promise<Clip> {
+  const cached = clips.get(url);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const opening = new Promise<Clip>((resolve, reject) => {
+    const video = Object.assign(document.createElement("video"), {
+      muted: true,
+      playsInline: true,
+      preload: "auto",
+      src: url,
+    });
+    video.addEventListener("loadeddata", () => {
+      resolve(createClip(url, video));
+    });
+    video.addEventListener("error", () => {
+      reject(new Error(`The clip ${url} did not load.`));
+    });
+  });
+  clips.set(url, opening);
+  return opening;
 }
 ```
 
 Why it is shaped this way:
 
 - The first frame comes through `useLoader(ImageBitmapLoader, …)`, which suspends: the scene mounts with the poster's frame already decoded, so its first drawn frame is the poster and the crossfade does not pop.
-- Frames are fetched as compressed blobs (about 6 MB for a whole desktop sequence) and decoded on demand with `createImageBitmap`, off the main thread. Only 8 decoded frames stay in memory around the playhead: 150 decoded 1600×900 frames would take 860 MB.
-- `imageOrientation: "flipY"` at decode, `flipY: false` on the texture: three's `flipY` does nothing on an `ImageBitmap`, and a frame decoded without the flip draws upside down.
-- No mipmaps on frame textures: each frame change is one upload, not a mipmap chain.
+- The crop is chosen from the stage's own box when the scene mounts (`useThree` size), not from the window or the tier: a landscape tablet is `light` but wide, and a stage need not fill the window.
+- One store per stage: frames are fetched as compressed blobs (about 6 MB for a whole desktop stage) and decoded on demand with `createImageBitmap`, off the main thread. Only 8 decoded frames stay, the farthest from the playhead closing first; the playhead and the prepared frame never close. 150 decoded 1600×900 frames would take 860 MB.
+- The next shot's first frame is decoded from the middle of the current shot and uploaded to the second texture before the dissolve starts; the dissolve stays at 0 until it is there.
+- `imageOrientation: "flipY"` at decode, `flipY: false` on the texture: three's `flipY` does nothing on an `ImageBitmap`, and a frame decoded without the flip draws upside down. No mipmaps: a frame change is one upload.
 - Materials are built imperatively, and writes go through module-level functions, for the reasons in `shader-craft` §3.
-- Seeks on a video are coalesced: setting `currentTime` on every scroll frame queues seeks and the picture lags behind the scroll.
+- The clip resolves at `loadeddata`, when the duration is known: a seek before metadata never fires `seeked`, and a `NaN` duration would make every seek target `NaN`. Seeks are coalesced: setting `currentTime` on every scroll frame queues seeks and the picture lags behind the scroll.
