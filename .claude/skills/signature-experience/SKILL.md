@@ -17,10 +17,9 @@ This skill takes a brief to a verified page with no one in the loop, at the leve
   - `tdd`: choose the seams and log them instead of confirming them.
 - **Two hard stops, and nothing else** (ADR-0028):
   1. **Spend.** A Magnific call that would take the page above 30,000 credits. The ledger in `assets/provenance.json` and the stop's message follow `asset-production` §3: stop before the call, and list the options priced, the cheaper one first.
-  2. **Technology.** A technical decision outside the accepted ADRs: a library, tool, service, pattern or configuration that neither ADR-0024 to ADR-0027 nor an earlier accepted ADR covers. Look first for a route inside the arsenal that tells the same beat, and log the comparison. If none exists, write the ADR with `status: proposed` (`adr` skill), then stop and report what waits on it.
+  2. **Technology.** A technical decision outside the accepted ADRs: a library, tool, service, pattern or configuration that no accepted ADR covers (ADR-0024 to ADR-0029 fix the arsenal). Look first for a route inside the arsenal that tells the same beat, and log the comparison. If none exists, write the ADR with `status: proposed` (`adr` skill), then stop and report what waits on it.
 
   Nothing else stops a run: an ambiguous brief, a missing fact, an optional source that is unavailable, a failed review round, a red check. Each one is decided, logged, and the run goes on. A check that no fix turns green ends the run with a failure report (§9): that is an end, not a pause.
-- **Arsenal ADRs not yet accepted.** If ADR-0024 to ADR-0028 are still `proposed` when the run starts, proceed: they define the arsenal this skill is built on and only wait for the user's acceptance. `pnpm check` then stays red on `adr:check` alone. It is the last step of the chain, so everything before it has passed. Say so in the final report. Never change an ADR's status. This is not hard stop 2, which concerns an ADR the run writes itself.
 - **The journal.** Log each decision as one entry under `## Decisions` in `DESIGN.md`: the step, what was chosen, over which alternatives, and the test the others failed. The motion language goes under `## Motion language`. Plans go under `## Page: <name>` in `### Transitions`, `### Storyboard` and `### Assets`, as their skills say. `DESIGN.md` holds choices and plans, never token values (`theme.css` holds them). The user must be able to audit the whole run from that file alone.
 - **Resume.** After an interruption or a context reset, read `## Decisions`, the page section and the page's ledger entry, recompute `spent` from the entries (`asset-production` §3), and continue at the first step that has no record.
 
@@ -38,7 +37,7 @@ This skill takes a brief to a verified page with no one in the loop, at the leve
   - `@repo/ui` components with their stories, tests, `packages/ui/AGENTS.md` rows and Code Connect templates;
   - app helpers in `apps/web/src/lib/` with their tests, including the ones that read repository facts for the starter's sections.
 
-  Search the remaining imports for each one, because a package export can look used to `knip`. `pnpm check` must stay green on everything but `adr:check`.
+  Search the remaining imports for each one, because a package export can look used to `knip`. `pnpm check` must stay green.
 - Site metadata (title, description, `lang`, social image) follows the client. `AGENTS.md`, the ADRs and the skills describe the system and stay.
 
 **A brief with few facts.**
@@ -134,7 +133,7 @@ Run `asset-production` gates 1 and 2 in autonomous mode: the asset list under `#
 
 ## 9. Quality loop
 
-In this order, each step starting once the one before passes. `pnpm check` counts as passed when only `adr:check` is red on the arsenal ADRs.
+In this order, each step starting once the one before passes.
 
 1. `motion-review` on the signature scenes: the grid, five rounds at most.
 2. The `design-reviewer` agent on the route, at its viewports and in both schemes. Give it the folder of the last `motion-review` round: it scores the grid from those captures instead of capturing again. Fix every high and medium finding, and log the low ones you leave.
@@ -166,7 +165,7 @@ End with a short report to the user:
 
 - the route, the chosen concept in one sentence and its family;
 - the `motion-review` verdict and scores, and the frame times per tier;
-- the Lighthouse scores on mobile and desktop, and the state of `pnpm check` and `pnpm test:e2e`, noting when `adr:check` alone is red because ADR-0024 to ADR-0028 await acceptance;
+- the Lighthouse scores on mobile and desktop, and the state of `pnpm check` and `pnpm test:e2e`;
 - the credits spent out of 30,000, and the paths above;
 - every `[NEED: …]` placeholder, every criterion under 4 and every finding left open, with the reason.
 
@@ -187,5 +186,5 @@ When asked for the plan without producing anything, walk the same steps in the s
 - Leaving the starter, or what only it used, beside the client's page.
 - Writing anything but `proposed` in an ADR, or a library without an accepted ADR.
 - A paid call without its ledger entry.
-- Calling the run done with a red check other than `adr:check` on the arsenal ADRs.
+- Calling the run done with a red check.
 - Versioning recordings, sheets, traces or reference captures.
