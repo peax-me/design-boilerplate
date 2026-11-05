@@ -28,7 +28,7 @@
       "Bash(pnpm --filter @repo/web build)",
       "Bash(pnpm --filter @repo/web start*)",
       "Bash(pnpm --filter @repo/web exec playwright test*)",
-      "Bash(curl -sf http://localhost*)",
+      "Bash(curl -sf http://localhost:*)",
       "Bash(jq *)",
       "mcp__magnific",
       "mcp__playwright",
