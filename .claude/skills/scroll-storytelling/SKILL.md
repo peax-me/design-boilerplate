@@ -1,6 +1,6 @@
 ---
 name: scroll-storytelling
-description: Turn a page's copy into long, choreographed scroll animations and build them with GSAP through the design system. Use when the user wants scroll animations, a scroll-driven story, pinned sections, a signature animation moment, kinetic typography (split headlines, word cycles with blur, scrambled text, mask reveals), or "animations like the best landing pages".
+description: Turn a page's copy into long, choreographed scroll animations and build them with GSAP through the design system. Use when the user wants scroll animations, a scroll-driven story, held (pinned) sections, a signature animation moment, kinetic typography (split headlines, word cycles with blur, scrambled text, mask reveals), or "animations like the best landing pages".
 ---
 
 # Scroll storytelling
@@ -9,19 +9,21 @@ Long animations that feel effortless come from a storyboard, not from effects. E
 
 ## 1. Budget
 
-Per page: two or three scenes, one of them the signature moment. When only one beat of the copy has a sequence, a cause or a continuity to show (§2), the page has that one scene, the signature, rather than a thin second one. Everything else stays still or uses short CSS transitions. A scene lasts one to three screens of scroll (`length="short" | "medium" | "long"`); longer pins feel like a trap. A page built as one world (`motion-design` §4, build in §4 below) counts as one scene, however many sections it spans, because nothing is held: the copy scrolls normally over it.
+Per page: two or three scenes, one of them the signature moment. When only one beat of the copy has a sequence, a cause or a continuity to show (§2), the page has that one scene, the signature, rather than a thin second one. Everything else stays still or uses short CSS transitions. A scene lasts one to three screens of scroll (`length="short" | "medium" | "long"`); longer holds feel like a trap. A page built as one world (`motion-design` §4, build in §4 below) counts as one scene, however many sections it spans, because nothing is held: the copy scrolls normally over it.
 
 ## 2. Map beats to scenes
 
 | Beat      | Scene that explains it                                                    |
 | --------- | ------------------------------------------------------------------------- |
-| Promise   | Headline assembles line by line, then gives way to the product            |
-| Mechanism | Pinned stage: the steps of how it works appear in order on one canvas     |
+| Promise   | The painted headline gives way to the product as the scroll starts        |
+| Mechanism | Held stage: the steps of how it works appear in order on one canvas       |
 | Proof     | A figure counts up or a before/after wipes across while the claim stays   |
 | Contrast  | The old way and the new way share one frame; scroll swaps them            |
 | Action    | No scene. Calm, readable, one button                                      |
 
 If a beat has no sequence, cause or continuity to show, it gets no scene.
+
+**The first window is already painted.** GSAP loads once the page is idle, after the visitor has seen the page (ADR-0011), so nothing in the first window ever assembles from a hidden state: hiding it to play an entrance would replay what was already read. A scene that can sit in the first window starts from its painted composition and moves it on as the scroll starts; entrances belong to content below it, played as it enters the window.
 
 ## 3. Storyboard
 
@@ -76,6 +78,7 @@ export function MechanismScene() {
 Rules:
 
 - Write the final state in markup and animate **from** an offset (`timeline.from`). Reduced motion skips the choreography, so the markup must already be the complete page. When the story has stages a final state cannot show, pass them to `ScrollScene still={…}` as still plates.
+- **A scene that can sit in the first window** is the exception: the visitor has read its markup before the timeline exists, and a `timeline.from` would snap it to its hidden state at idle. Its progress 0 is the painted composition, and its choreography moves content on from there (`timeline.to`): out, aside, into the next beat (§2, "The first window is already painted").
 - Target elements with `data-scene-item` attributes; selectors are scoped to the scene.
 - Animate `transform` and `opacity` only; the one exception is the short-text blur of §5. Durations, easings and staggers come from `@repo/ui/motion/tokens`; add a token there rather than a magic number.
 - **Durations in a scrubbed timeline are shares of the scene**, not seconds: a `duration.slow` tween in a `medium` scene spans 0.8 of its timeline, and letters crawl over more than a screen. Write scrubbed spans in window heights (a scroll span token, `motion-design` §1) and convert them, `inScene(span, length) = span / sceneLength[length]`. A primitive that runs in both played and scrubbed timelines (a letter reveal, a counter) takes its timing as an argument.
@@ -84,8 +87,8 @@ Rules:
 - A scene that hosts a WebGL stage tweens the page's `{ value }` progress object and never the stage's internals (`shader-craft` §3).
 - A transition across a boundary is built inside the outgoing scene's track, while its stage is still held: its last phases resolve the stage toward the next section's surface, carry an element into it, or wipe the next surface over it, so the frame that the sticky track releases already matches what follows (`motion-design` §3, "Stage to flat"). An element shared across the boundary travels in the timeline of the scene that spans it, or moves between two layouts with Flip (`gsap-plugins`).
 - A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill. Apps cannot import `@gsap/react`, so kinetic type a page needs is such a primitive too. Its GSAP code sits in a module of its own, rendered lazily inside `AfterIdle` (`packages/ui/AGENTS.md`).
-- A page module that imports `gsap` or a plugin puts GSAP back before the first paint (about 50 KB gzipped) and costs Lighthouse mobile its LCP margin: rerun `pnpm --filter @repo/web lighthouse` after adding one.
-- A choreography that writes the page's progress object uses `gsap.set(progress, { value })` or a tween, never `progress.value = …`: the lint's `no-param-reassign` rejects writes to a prop.
+- A page never imports `gsap` or a plugin: `apps/web` does not depend on it, and adding it would put GSAP back before the first paint (about 50 KB gzipped) and cost Lighthouse mobile its LCP margin. The choreography only calls methods of the `timeline` it receives.
+- A choreography that writes the page's progress object uses `timeline.set(progress, { value }, position)` or a tween, never `progress.value = …`: the lint's `no-param-reassign` rejects writes to a prop.
 
 ### One smoothing layer
 
@@ -114,33 +117,60 @@ Recipes, parameters and the reasons behind them: `references/section-handoffs.md
 
 ## 5. Kinetic type
 
-Moving type belongs to the choreography of a budgeted scene (§1), never to an extra scene, and only to a headline or a short statement that carries the beat: not to body copy. The final text is in the markup, read by everything. Under reduced motion `ScrollScene` skips the choreography, so SplitText never touches the text and the page already shows it; keep that true outside a scene too (an intro on load runs inside `gsap.matchMedia` for `no-preference`), and never hide the text in CSS until JavaScript runs.
+Moving type belongs to the choreography of a budgeted scene (§1), never to an extra scene, and only to a headline or a short statement that carries the beat: not to body copy. The final text is in the markup, read by everything. Under reduced motion SplitText never touches the text and the page already shows it, and the text is never hidden in CSS until JavaScript runs. Text in the first window is never split to play an intro: it was read before GSAP loaded (§2).
 
-**Split with SplitText** (`gsap-plugins`; it comes with the `gsap` package, registered in the module that uses it):
+**Where it lives.** A page cannot import `gsap` (§4), so kinetic type is a motion primitive of `packages/ui`, built through `design-system` the first time a page needs it, in two modules:
 
-- Create it inside the choreography, so the scene's `gsap.matchMedia` scopes the selector to the scene and reverts the split on cleanup: `SplitText.create(target, { type, autoSplit: true, aria: "auto", onSplit })`.
+- the component of the first load renders the final text with its `data-slot`, imports nothing from GSAP, and renders the motion module lazily inside `AfterIdle`;
+- the motion module imports `gsap` and `SplitText` (`gsap-plugins`; it comes with the `gsap` package and is registered there), runs under `gsap.matchMedia` for `no-preference`, and plays its reveal through `enterUnseen`, which leaves text already in view as painted and plays the reveal as unseen text enters the window.
+
+A reveal scrubbed by a scene's timeline needs that timeline in the motion module: `ScrollScene` hands none to its children yet, so add that channel through `design-system`, tests first, when the first scene needs it.
+
+**Split with SplitText:**
+
+- Create it inside the motion module's `useGSAP` and `gsap.matchMedia`, so the selector is scoped to the primitive and the split reverts on cleanup: `SplitText.create(target, { type, autoSplit: true, aria: "auto", onSplit })`.
 - Split only what moves: `"lines"` for a line reveal, `"words"` for a word reveal, `"chars"` only on a short word.
-- `autoSplit: true` splits again when the fonts load and when the width changes, so line breaks stay right: never split from `document.fonts.ready` by hand. A re-split destroys the pieces, so build the tween in `onSplit`, add it to the scene timeline at a fixed position and return it: SplitText kills the old tween and carries the progress over to the new one.
+- `autoSplit: true` splits again when the fonts load and when the width changes, so line breaks stay right: never split from `document.fonts.ready` by hand. A re-split destroys the pieces, so build the tween in `onSplit`, add it to its timeline (the reveal's, or the scene's) at a fixed position and return it: SplitText kills the old tween and carries the progress over to the new one.
 - `aria: "auto"`, passed explicitly, puts an `aria-label` with the text on the split element and hides the pieces from assistive technology. Use it on headings, where the label is announced, and on short statements; a paragraph does not announce one.
 
 ```tsx
+// packages/ui/src/motion/line-reveal-motion.tsx: rendered lazily inside AfterIdle by the LineReveal primitive
+"use client";
+
+import { useGSAP } from "@gsap/react";
 import { gsap } from "gsap";
 import { SplitText } from "gsap/SplitText";
+import type { RefObject } from "react";
 
-gsap.registerPlugin(SplitText);
+import { enterUnseen } from "./enter-unseen.ts";
+import { duration, ease, stagger } from "./tokens.ts";
 
-function revealHeadline(timeline: gsap.core.Timeline): void {
-  SplitText.create("[data-scene-item='headline']", {
-    type: "lines",
-    mask: "lines",
-    autoSplit: true,
-    aria: "auto",
-    onSplit(split) {
-      const lines = gsap.from(split.lines, { yPercent: 110, duration: duration.slow, ease: ease.emphasized, stagger: stagger.base });
-      timeline.add(lines, 0);
-      return lines;
+gsap.registerPlugin(useGSAP, SplitText);
+
+export function LineRevealMotion({ scope }: { scope: RefObject<HTMLElement | null> }): null {
+  useGSAP(
+    () => {
+      gsap.matchMedia().add("(prefers-reduced-motion: no-preference)", () =>
+        enterUnseen(scope.current, () => {
+          const reveal = gsap.timeline();
+          SplitText.create("[data-line-reveal]", {
+            type: "lines",
+            mask: "lines",
+            autoSplit: true,
+            aria: "auto",
+            onSplit(split) {
+              const lines = gsap.from(split.lines, { yPercent: 110, duration: duration.slow, ease: ease.emphasized, stagger: stagger.base });
+              reveal.add(lines, 0);
+              return lines;
+            },
+          });
+          return reveal;
+        }),
+      );
     },
-  });
+    { scope },
+  );
+  return null;
 }
 ```
 
