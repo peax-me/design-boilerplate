@@ -45,21 +45,25 @@ function hop(meshes: Mesh[]): void {
   );
 }
 
+/* The group leans toward the mouse through one reused tween. A finger means scroll on a phone, so touch never tilts it. */
 function usePointerTilt(group: RefObject<Group | null>): void {
-  useEffect(() => {
-    function tilt(event: PointerEvent): void {
-      if (group.current === null) {
-        return;
-      }
-      gsap.to(group.current.rotation, {
-        y: (event.clientX / window.innerWidth - 0.5) * TILT,
-        duration: duration.slow,
-        ease: ease.emphasized,
-      });
+  useEffect((): (() => void) | undefined => {
+    if (group.current === null) {
+      return undefined;
     }
-    window.addEventListener("pointermove", tilt);
+    const tiltTo = gsap.quickTo(group.current.rotation, "y", {
+      duration: duration.slow,
+      ease: ease.emphasized,
+    });
+    function tilt(event: PointerEvent): void {
+      if (event.pointerType === "mouse") {
+        tiltTo((event.clientX / window.innerWidth - 0.5) * TILT);
+      }
+    }
+    window.addEventListener("pointermove", tilt, { passive: true });
     return () => {
       window.removeEventListener("pointermove", tilt);
+      tiltTo.tween.kill();
     };
   }, [group]);
 }
