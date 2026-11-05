@@ -346,7 +346,7 @@ The shader gets its test before its code (`references/effect-skeleton.md`, `test
 
 ## 9. Performance
 
-Budgets are global: Lighthouse ≥ 0.95 on mobile and desktop for every route, and on a real GPU with the CPU slowed 4×, a 95th-percentile frame ≤ 20 ms and no long animation frame over 100 ms during scroll. The `motion-review` skill owns the capture procedure. `pnpm test:e2e` fails on a blank canvas, a frozen ambient canvas, and any `THREE.WebGLProgram` or shader error in the console. A shader that fails to compile does not throw in the page: three logs the error and draws nothing, which is why the test of §8 throws instead.
+Budgets are global: Lighthouse ≥ 0.95 on mobile and desktop for every route, and on a real GPU with the CPU slowed 4×, a 95th-percentile frame ≤ 20 ms, no long animation frame over 300 ms until the first window's stages are live (the first stage mount right after page load included) and none over 100 ms after, every stage load during scroll included (ADR-0026). The `motion-review` skill owns the capture procedure. `pnpm test:e2e` fails on a blank canvas, a frozen ambient canvas, and any `THREE.WebGLProgram` or shader error in the console. A shader that fails to compile does not throw in the page: three logs the error and draws nothing, which is why the test of §8 throws instead.
 
 | Cost knob, per tier                                       | `light`                                      | `full`          |
 | --------------------------------------------------------- | -------------------------------------------- | --------------- |

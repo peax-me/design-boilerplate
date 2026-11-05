@@ -1,6 +1,6 @@
 ---
 name: motion-review
-description: Capture and judge an animated page the way a visitor sees it. Captures are the e2e frame attachments, a Playwright MCP video of a scripted scroll with its ffmpeg contact sheet and arrival strips, boundary strips from screenshots taken during a scripted wheel scroll with a dense pass over sweeps and settled shots of every seam, a check that every stage goes live during a continuous scroll, frame times and a Chrome DevTools trace with the CPU slowed 4× on the real GPU (95th percentile ≤ 20 ms, no long animation frame over 100 ms, layout shift ≤ 0.1), reduced motion and a 390×844 phone. The judgement is an eleven-criterion grid scored 1 to 5 against the project's own references, then fix and re-capture, five rounds at most. Use after building or changing a scroll scene, a transition, a WebGL stage, a shader, particles, footage or a 3D scene, when a page "feels off", or when asked to review, record or measure motion.
+description: Capture and judge an animated page the way a visitor sees it. Captures are the e2e frame attachments, a Playwright MCP video of a scripted scroll with its ffmpeg contact sheet and arrival strips, boundary strips from screenshots taken during a scripted wheel scroll with a dense pass over sweeps and settled shots of every seam, a check that every stage goes live during a continuous scroll, frame times and a Chrome DevTools trace with the CPU slowed 4× on the real GPU (95th percentile ≤ 20 ms, long animation frames ≤ 300 ms until the first window's stages are live and ≤ 100 ms after, layout shift ≤ 0.1), reduced motion and a 390×844 phone. The judgement is an eleven-criterion grid scored 1 to 5 against the project's own references, then fix and re-capture, five rounds at most. Use after building or changing a scroll scene, a transition, a WebGL stage, a shader, particles, footage or a 3D scene, when a page "feels off", or when asked to review, record or measure motion.
 ---
 
 # Motion review
@@ -59,8 +59,8 @@ Never call `browser_video_chapter` or `browser_video_show_actions` while recordi
 
 The same snippet serves the recording and the verdict (§2.4). It works in three phases:
 
-1. It returns to the top, since a reload restores the last scroll position, and it starts its observers before anything else, so every stage load is counted.
-2. It waits for the stages in the window to go live, nudging the scroll because `light` loads on a first interaction. The long frames of that load count, because a phone meets them on its first scroll.
+1. It returns to the top, since a reload restores the last scroll position. It reads long animation frames from the page load (a buffered observer), so the first stage mount counts however long after the load the snippet starts. Run it right after a fresh navigation: a second run on the same page would count the first one's frames.
+2. It waits for the stages in the window to go live, nudging the scroll because `light` loads on a first interaction. Every frame until then, hydration and the first stage mount included, is held to the load budget, 300 ms; every later frame to the scroll budget, 100 ms (ADR-0026). A phone meets that first mount on its first scroll, so it counts.
 3. It scrolls the whole page at a constant 1.2 s per screen, measuring every frame and every layout shift. Whenever a stage in the window is not live yet, the scroll holds, still measuring, until it is.
 
 The holds matter. A scene draws its first frame only on screen, so a continuous scroll can pass a stage before it goes live. The run would then measure a page without its scenes, and the recording would show posters only.
@@ -75,17 +75,19 @@ async () => {
   }
   const HOLD_LIMIT_MS = 20000;
   const SECONDS_PER_SCREEN = 1.2;
+  const LOAD_BUDGET_MS = 300;
+  const SCROLL_BUDGET_MS = 100;
   scrollTo(0, 0);
   const longFrames = [];
   const shifts = [];
   const record = (entries) => {
     for (const entry of entries) {
-      if (entry.entryType === "long-animation-frame") longFrames.push(Math.round(entry.duration));
+      if (entry.entryType === "long-animation-frame") longFrames.push({ start: entry.startTime, duration: Math.round(entry.duration) });
       else if (!entry.hadRecentInput) shifts.push(entry);
     }
   };
   const observer = new PerformanceObserver((list) => record(list.getEntries()));
-  observer.observe({ type: "long-animation-frame" });
+  observer.observe({ type: "long-animation-frame", buffered: true });
   observer.observe({ type: "layout-shift" });
   const visible = new Set();
   const watcher = new IntersectionObserver((entries) => {
@@ -103,6 +105,7 @@ async () => {
     scrollTo(0, scrollY === 0 ? 1 : 0);
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
+  const loadEnd = performance.now();
   scrollTo(0, 0);
   const scrollable = document.documentElement.scrollHeight - innerHeight;
   const duration = Math.max(scrollable / innerHeight, 1) * SECONDS_PER_SCREEN * 1000;
@@ -146,20 +149,24 @@ async () => {
   }
   deltas.sort((first, second) => first - second);
   const p95 = deltas[Math.ceil(deltas.length * 0.95) - 1];
+  const loadFrames = longFrames.filter(({ start }) => start < loadEnd).map(({ duration }) => duration);
+  const scrollFrames = longFrames.filter(({ start }) => start >= loadEnd).map(({ duration }) => duration);
   return {
     seconds: Math.round((duration + held) / 100) / 10,
     heldSeconds: Math.round(held / 100) / 10,
     frames: deltas.length,
     medianFrameMs: Math.round(deltas[Math.floor(deltas.length / 2)] * 10) / 10,
     p95FrameMs: Math.round(p95 * 10) / 10,
-    longFramesMs: longFrames,
+    loadLongFramesMs: loadFrames,
+    scrollLongFramesMs: scrollFrames,
     layoutShift: Math.round(layoutShift * 1000) / 1000,
-    frameBudgetPass: p95 <= 20 && Math.max(0, ...longFrames) <= 100,
+    frameBudgetPass:
+      p95 <= 20 && Math.max(0, ...loadFrames) <= LOAD_BUDGET_MS && Math.max(0, ...scrollFrames) <= SCROLL_BUDGET_MS,
   };
 }
 ```
 
-- `longFramesMs` lists every long animation frame (50 ms and over). Only those above 100 ms fail the frame budget.
+- `loadLongFramesMs` lists the long animation frames (50 ms and over) from the page load until the stages of the first window are live, hydration and the first stage mount included: one above 300 ms fails the frame budget. `scrollLongFramesMs` lists every later one, each stage load during the scroll included: one above 100 ms fails it. A page whose first window holds no stage ends its load phase as soon as the snippet starts.
 - `medianFrameMs` belongs beside every recording: a capture whose frames run slow makes a scene whose frame delta is capped look laggy on the video, a lag the page does not have.
 - `layoutShift` is the largest session window of shifts during the run, computed the way CLS is. Lenis turns wheel input into the same scroll writes as the snippet, so a real wheel scroll gives the same figure. Field CLS counts the whole visit, scrolls included, so a shift above 0.1 marks the page as poor in Core Web Vitals even when the recording shows no jump, as with a pin switching layout. It caps criterion 9 at 2, and the fix belongs to `scroll-storytelling` (its scenes allow no layout shift, §6). A shift the strip does show also scores criterion 4 at 3 or less. The trace names the shifted element (§2.4).
 
@@ -301,12 +308,12 @@ SwiftShader and headless timings mean nothing, so measure in the headed Chrome t
    }
    ```
 
-5. `mcp__chrome-devtools__evaluate_script` with the scroll snippet of §2.2. This untraced pass is the verdict: p95 ≤ 20 ms and no long animation frame above 100 ms, every stage load included, and its `layoutShift`.
-6. Reload, then `mcp__chrome-devtools__performance_start_trace` with `reload: false` and `autoStop: false`, the scroll snippet again, and `mcp__chrome-devtools__performance_stop_trace` with an absolute `filePath` to `<dir>/trace-<tier>.json.gz`. The trace explains a failure: tracing adds overhead, so never use it for the verdict. Open the insights it lists with `mcp__chrome-devtools__performance_analyze_insight`, copying the `insightSetId` and `insightName` exactly. `CLSCulprits` names the element behind a scroll-time shift; a scene's pin is the usual one.
-7. `mcp__chrome-devtools__list_console_messages` with `types: ["error", "warn"]`. Only WebGL and shader messages count, as in the audit.
+5. `mcp__chrome-devtools__evaluate_script` with the scroll snippet of §2.2. This untraced pass is the verdict: p95 ≤ 20 ms, no long animation frame above 300 ms until the first window's stages are live nor above 100 ms after (every stage load during the scroll included), and its `layoutShift`.
+6. Reload, then `mcp__chrome-devtools__performance_start_trace` with `reload: false` and `autoStop: false`, the scroll snippet again, and `mcp__chrome-devtools__performance_stop_trace` with an absolute `filePath` to `<dir>/trace-<tier>.json.gz`. The trace explains a failure: tracing adds overhead, so never use it for the verdict. Open the insights it lists with `mcp__chrome-devtools__performance_analyze_insight`, copying the `insightSetId` and `insightName` exactly. `CLSCulprits` names the element behind a scroll-time shift; a ScrollTrigger `pin`, or a held stage sized in `dvh` that a phone toolbar resizes, is the usual one.
+7. `mcp__chrome-devtools__list_console_messages` with `types: ["error", "warn", "log"]`: three logs a lost context at the log level. Only WebGL and shader messages count, as in the audit.
 8. Reset with `mcp__chrome-devtools__emulate` and the `pageId` alone, then `mcp__chrome-devtools__close_page`.
 
-Record per tier in the round: renderer, `seconds`, `frames`, `p95FrameMs`, `longFramesMs`, `layoutShift`.
+Record per tier in the round: renderer, `seconds`, `frames`, `p95FrameMs`, `loadLongFramesMs`, `scrollLongFramesMs`, `layoutShift`.
 
 ### 2.5 Reduced motion and the phone
 
@@ -336,7 +343,7 @@ Eleven criteria, each scored 1 to 5. The expected level is that of a hand-made s
 | 6. Pointer response         | The scene answers the mouse with weight (smoothed, slightly behind), in proportion, and the answer means something: the light follows, the matter parts. A touch does nothing because the finger scrolls, and the wheel is never captured. **N/A** when the storyboard gives the concept no pointer channel and `## Decisions` says why (a film-like shot, kinetic type)                                                                                     | No response on desktop where the storyboard promises one, a jittery one-to-one follow, a reaction that breaks the composition or covers copy, or a captured wheel                                                                                                                                                                                                                                                                             |
 | 7. Coherence with DESIGN.md | Colours resolve from theme tokens (a scheme swap recolours the scene); the motion obeys `## Motion language`: its personality, its travel (entrances from upstream, exits downstream, counter-motion only between depth planes) and its "never" line; every technique on the page shares one light direction, one grade and one grain; materials and light match the direction's world; nothing from its "Don't" list appears                                | A colour outside the theme, a motion personality from elsewhere, motion against the travel without a depth reason, a stage lit, graded or grained unlike its neighbours, or a reference's look instead of its principle                                                                                                                                                                                                                       |
 | 8. Originality              | None of the forbidden clichés, and no brand in the category could ship it unchanged. It borrows principles from the references, never their look                                                                                                                                                                                                                                                                                                             | A cliché, even recoloured or renamed; the category's default image; a reference reproduced                                                                                                                                                                                                                                                                                                                                                    |
-| 9. Performance              | On both tiers at 4× CPU: p95 well under 20 ms, no long animation frame over 100 ms during the run (every stage load included), and `layoutShift` at 0.1 or less. A 4 is within the thresholds                                                                                                                                                                                                                                                                | Any threshold missed on either tier caps the score at 2, because a threshold is a gate. A known Lighthouse failure caps it at 2 too                                                                                                                                                                                                                                                                                                           |
+| 9. Performance              | On both tiers at 4× CPU: p95 well under 20 ms, no long animation frame over 300 ms until the first window's stages are live nor over 100 ms after (every stage load during the scroll included), and `layoutShift` at 0.1 or less. A 4 is within the thresholds                                                                                                                                                                                                                                                                | Any threshold missed on either tier caps the score at 2, because a threshold is a gate. A known Lighthouse failure caps it at 2 too                                                                                                                                                                                                                                                                                                           |
 | 10. Fallback quality        | Under reduced motion or without WebGL2 the page is complete: posters and still plates carry every beat, no canvas. The poster is the first frame (no pop at the crossfade) and crops like the canvas on every viewport. The phone's poster before the first interaction looks intended                                                                                                                                                                       | A pop, a still that does not match its beat, a missing beat, a poster cropped unlike the canvas                                                                                                                                                                                                                                                                                                                                               |
 | 11. Transitions and pacing  | Every boundary of `### Transitions` is crafted as its row says: the carrier is on both sides of the strip, the screen direction holds, the incoming focal point meets the eye where the outgoing one left it, shot seams are invisible, and a stage resolves into the next section before its hold releases. Scenes build to the signature and release, with a rest between peaks, and copy holds still while it is read (`motion-design` §7, checks 1 to 9) | A boundary without a row, a forbidden default (an unrelated crossfade, an undirected noise dissolve, a WebGL stage sliding off over a flat section), a hard cut no `cut` row explains, a reversed screen direction, two copy blocks readable at once, two peaks with no rest between them, a straight edge between two grounds, a world that trails its copy, an action played while no copy is on screen, or a carried element crossing copy |
 

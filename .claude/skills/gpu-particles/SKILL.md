@@ -48,7 +48,7 @@ Start from `references/particle-scene.md`: the four modules and the morph test, 
 
 ## 3. Prepare the shapes
 
-Shapes are sampled offline, never in the browser: sampling 131,072 points blocks the main thread far past the 100 ms long-frame budget, and the browser would download a multi-megabyte model to keep only its surface. The `.bin` file is exactly what the GPU needs.
+Shapes are sampled offline, never in the browser: sampling 131,072 points blocks the main thread far past the long-frame budgets (`motion-review` §2.2), and the browser would download a multi-megabyte model to keep only its surface. The `.bin` file is exactly what the GPU needs.
 
 **Get each shape as a GLB**, in this order:
 
