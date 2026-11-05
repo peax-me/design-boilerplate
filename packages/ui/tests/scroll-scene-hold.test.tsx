@@ -155,4 +155,30 @@ describe("ScrollScene hold", () => {
     await scrollToSettled(end);
     expect(trigger?.progress).toBe(1);
   });
+
+  it("drives its timeline straight from the scroll with a direct scrub, for a world that smooths itself", async () => {
+    const progress = { value: 0 };
+    const timelines: gsap.core.Timeline[] = [];
+    const screen = await render(
+      onPage(
+        <ScrollScene
+          scrub="direct"
+          choreography={(timeline) => {
+            timeline.to(progress, { value: 1, ease: "none" });
+            timelines.push(timeline);
+          }}
+        >
+          <p>Direct content</p>
+        </ScrollScene>,
+      ),
+    );
+    await expect.poll(() => timelines).toHaveLength(1);
+    const start = pageTopOf(screen.container);
+    const end = start + sceneLength.medium * window.innerHeight;
+    await expect.poll(() => timelines[0]?.scrollTrigger?.end).toBeCloseTo(end, 0);
+
+    await scrollToSettled((start + end) / 2);
+
+    expect(progress.value).toBeCloseTo(0.5, 2);
+  });
 });

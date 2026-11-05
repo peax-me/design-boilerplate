@@ -18,10 +18,20 @@ const breakpointQuery = {
 
 export type SceneBreakpoint = keyof typeof breakpointQuery;
 
+/* smoothed: the timeline catches up with the scroll over the scrub token, the one smoothing layer of a scene.
+   direct: the timeline follows the scroll position exactly, for a world that already smooths itself (a spring). */
+const scrubbing = {
+  smoothed: scrub,
+  direct: true,
+} as const;
+
+export type SceneScrub = keyof typeof scrubbing;
+
 interface ScrollSceneTimelineProps {
   track: RefObject<HTMLDivElement | null>;
   choreography: (timeline: gsap.core.Timeline) => void;
   minWidth: SceneBreakpoint;
+  scrub: SceneScrub;
 }
 
 /* One timeline scrubbed across the track, from the breakpoint up and only when motion is allowed. */
@@ -29,6 +39,7 @@ export function ScrollSceneTimeline({
   track,
   choreography,
   minWidth,
+  scrub: scrubbingMode,
 }: ScrollSceneTimelineProps): null {
   useGSAP(
     () => {
@@ -40,7 +51,7 @@ export function ScrollSceneTimeline({
               trigger: track.current,
               start: "top top",
               end: "bottom bottom",
-              scrub,
+              scrub: scrubbing[scrubbingMode],
             },
           }),
         );

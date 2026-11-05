@@ -4,7 +4,7 @@ import { cva } from "class-variance-authority";
 import { lazy, type ReactNode, useRef } from "react";
 
 import { AfterIdle } from "./after-idle.tsx";
-import type { SceneBreakpoint } from "./scroll-scene-timeline.tsx";
+import type { SceneBreakpoint, SceneScrub } from "./scroll-scene-timeline.tsx";
 import { sceneLength } from "./tokens.ts";
 
 const LazyScrollSceneTimeline = lazy(async () => {
@@ -40,6 +40,8 @@ interface ScrollSceneProps {
   choreography: (timeline: gsap.core.Timeline) => void;
   length?: keyof typeof sceneLength;
   minWidth?: SceneBreakpoint;
+  /* direct for a world that smooths itself (a spring): a scrub on top would leave it behind its copy. */
+  scrub?: SceneScrub;
 }
 
 export function ScrollScene({
@@ -48,6 +50,7 @@ export function ScrollScene({
   choreography,
   length = "medium",
   minWidth = "all",
+  scrub = "smoothed",
 }: ScrollSceneProps) {
   const track = useRef<HTMLDivElement>(null);
 
@@ -67,7 +70,12 @@ export function ScrollScene({
         <div key={screen} className={holdVariants({ minWidth })} />
       ))}
       <AfterIdle>
-        <LazyScrollSceneTimeline track={track} choreography={choreography} minWidth={minWidth} />
+        <LazyScrollSceneTimeline
+          track={track}
+          choreography={choreography}
+          minWidth={minWidth}
+          scrub={scrub}
+        />
       </AfterIdle>
     </div>
   );

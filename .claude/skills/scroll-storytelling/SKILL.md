@@ -94,10 +94,10 @@ Rules:
 | Setup                                               | The one layer                    | Never add                                                       |
 | --------------------------------------------------- | -------------------------------- | --------------------------------------------------------------- |
 | A held `ScrollScene` driving DOM or shader uniforms | the `scrub` token                | `quickTo`, damping or a spring on the progress or a uniform     |
-| A stage whose matter settles by itself (a spring)   | the world's own spring           | a scrub: drive the value directly (`scrub: true` or `gsap.set`) |
+| A stage whose matter settles by itself (a spring)   | the world's own spring           | a scrub: drive the value directly (`ScrollScene scrub="direct"`, or `gsap.set`) |
 | One world behind normally scrolling copy            | the world's own physics, or none | `scrub`, `quickTo`                                              |
 
-A `ScrollScene` with a direct scrub is a prop added through `design-system` when a scene needs it. Check the lag on a real wheel scroll with the probe of `motion-review` §2.3.
+`ScrollScene scrub="direct"` makes its timeline follow the scroll position exactly; the default, `"smoothed"`, catches up over the `scrub` token. Check the lag on a real wheel scroll with the probe of `motion-review` §2.3.
 
 ### One world
 
