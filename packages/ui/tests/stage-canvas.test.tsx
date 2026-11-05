@@ -83,6 +83,19 @@ async function runTickerFor(milliseconds: number): Promise<void> {
   gsap.ticker.remove(tick);
 }
 
+/* A visitor scrolling without a pause: the page sends a scroll event every frame. Timed here rather than tied to frames, so a busy
+   machine with slow frames cannot leave a gap long enough for a scroll-debounced measure to settle. */
+const SCROLL_EVENT_INTERVAL_MS = 10;
+
+function scrollWithoutPause(): () => void {
+  const interval = setInterval(() => {
+    document.dispatchEvent(new Event("scroll", { bubbles: true }));
+  }, SCROLL_EVENT_INTERVAL_MS);
+  return () => {
+    clearInterval(interval);
+  };
+}
+
 function frameSpy(): Mock<(delta: number) => void> {
   return vi.fn<(delta: number) => void>();
 }
@@ -175,6 +188,14 @@ describe("StageCanvas", () => {
     expect(onFrame).not.toHaveBeenCalled();
 
     canvasOf(screen.container).scrollIntoView();
+    await expect.poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT).toBeGreaterThan(0);
+  });
+
+  it("draws its first frame while the page keeps scrolling", async () => {
+    onTestFinished(scrollWithoutPause());
+    const onFrame = frameSpy();
+    await render(<Stage tier="full" onFrame={onFrame} />);
+
     await expect.poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT).toBeGreaterThan(0);
   });
 

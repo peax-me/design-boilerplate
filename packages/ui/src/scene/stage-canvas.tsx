@@ -91,7 +91,11 @@ function CompiledFrames({ paused }: { paused: boolean }) {
   return paused ? <HeldFrame /> : <TickerFrames />;
 }
 
-interface StageCanvasProps extends Omit<CanvasProps, "dpr" | "frameloop" | "gl"> {
+/* R3F re-measures its box on every scroll event, debounced by 50 ms: a visitor who never pauses would keep the canvas unsized and undrawn.
+   A stage needs its size, never its position, so only a resize measures it. */
+const MEASURE_SIZE_ONLY = { scroll: false };
+
+interface StageCanvasProps extends Omit<CanvasProps, "dpr" | "frameloop" | "gl" | "resize"> {
   tier: QualityTier;
 }
 
@@ -104,6 +108,7 @@ export function StageCanvas({ tier, children, ...canvasProps }: StageCanvasProps
       dpr={pixelRatio[tier]}
       frameloop="never"
       gl={{ antialias: tier === "full" }}
+      resize={MEASURE_SIZE_ONLY}
     >
       <CompiledFrames paused={paused} />
       {children}
