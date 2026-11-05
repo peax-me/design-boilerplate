@@ -32,3 +32,4 @@ Every technical decision in this repository (technologies, skills, MCP servers, 
 | 0026 | [Motion verification](0026-motion-verification.md)                                                         |
 | 0027 | [Production tooling](0027-production-tooling.md)                                                           |
 | 0028 | [Autonomous mode](0028-autonomous-mode.md)                                                                 |
+| 0029 | [Motion design direction skill](0029-motion-design-direction-skill.md)                                     |
