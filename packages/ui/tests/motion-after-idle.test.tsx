@@ -1,6 +1,7 @@
 import "../src/styles/globals.css";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 
 import type { Block } from "../src/lib/isometric.ts";
 import { BlockStage } from "../src/motion/block-stage.tsx";
@@ -8,6 +9,7 @@ import { MotionProvider } from "../src/motion/motion-provider.tsx";
 import { ScrollScene } from "../src/motion/scroll-scene.tsx";
 import { holdIdleCallbacks } from "./support/idle-callbacks.ts";
 import { pause, SETTLE_MS } from "./support/pause.ts";
+import { DESKTOP } from "./support/viewports.ts";
 
 const blocks: Block[] = [
   { id: "plank", x: 0, y: 0, z: 0, width: 4, depth: 1, height: 1, material: "maple" },
@@ -15,12 +17,20 @@ const blocks: Block[] = [
 
 let releaseIdleCallbacks: () => void;
 
-beforeEach(() => {
+function pieceOf(container: HTMLElement, label: string): HTMLElement | null {
+  return container.querySelector<HTMLElement>(
+    `[data-slot='block-stage']:has([aria-label='${label}']) [data-scene-item='plank']`,
+  );
+}
+
+beforeEach(async () => {
+  await page.viewport(DESKTOP.width, DESKTOP.height);
   releaseIdleCallbacks = holdIdleCallbacks();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.scrollTo(0, 0);
 });
 
 /* GSAP and Lenis are lazy: the first paint and hydration wait for none of them. */
@@ -56,15 +66,27 @@ describe("Motion once the page is idle", () => {
     await expect.poll(() => choreography.mock.calls.length).toBe(1);
   });
 
-  it("drops a block stage's drawing in only once the page is idle", async () => {
-    const screen = await render(<BlockStage blocks={blocks} label="Dropped pieces" />);
-    const piece = screen.container.querySelector<HTMLElement>("[data-scene-item='plank']");
+  it("never hides a drawing the visitor already sees once motion loads, and drops in the others as they enter the window", async () => {
+    const screen = await render(
+      <>
+        <BlockStage blocks={blocks} label="Seen pieces" />
+        <div style={{ height: "150vh" }} />
+        <BlockStage blocks={blocks} label="Unseen pieces" />
+      </>,
+    );
+    const seen = pieceOf(screen.container, "Seen pieces");
+    const unseen = pieceOf(screen.container, "Unseen pieces");
 
-    await expect.element(screen.getByRole("img", { name: "Dropped pieces" })).toBeVisible();
     await pause(SETTLE_MS);
-    expect(piece?.style.opacity).toBe("");
+    expect(unseen?.style.opacity).toBe("");
 
     releaseIdleCallbacks();
-    await expect.poll(() => piece?.style.opacity).not.toBe("");
+    /* Out of the window, the unseen drawing waits in its first state of the entrance. */
+    await expect.poll(() => unseen?.style.opacity).toBe("0");
+    expect(seen?.style.opacity).toBe("");
+
+    unseen?.scrollIntoView();
+    await expect.poll(() => unseen?.style.opacity).toBe("1");
+    expect(seen?.style.opacity).toBe("");
   });
 });
