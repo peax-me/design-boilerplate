@@ -40,6 +40,8 @@ A run is autonomous when the `signature-experience` skill is started from a brie
 
 Permissions: `.claude/settings.json` gains an allow-list for the arsenal tools (`blender -b`, `ffmpeg`, the image encoders, and the Magnific, Playwright, Chrome DevTools and Blender MCP tools). Tools that run JavaScript in the page, such as frame measurement, are to be used only against the project's local server. That is a rule of the skills, not a permission: `mcp__playwright` and `mcp__chrome-devtools` are allowed wholesale, and Claude Code permissions cannot filter MCP calls by URL. Runs keep the current permission mode of the Conductor workspaces.
 
+Amended on 2026-11-05: the allow-list keeps its narrowest forms, and a deny-list removes the tools that destroy or publish. `blender -b` runs only the versioned scripts of ADR-0027 (`blender -b -P assets/3d/source/scripts/*`), and `curl -sf` reaches only the fixed local ports 3000 and 3100; a trailing wildcard still accepts further arguments, so these rules narrow the target, not the whole command. The MCP servers stay allowed, except Magnific's purge, delete, trash and share tools and the browser servers' file-upload and file-drop tools, which are denied: sharing client assets or sending a local file to a page always waits for a human. Mandated by the project owner, 2026-11-05.
+
 Orchestration: the `signature-experience` skill starts from a brief, even a single sentence, and chains product context, direction, choice of technique family, storyboard, visual plan, code, then verification, critique and correction in a loop until the quality grid passes.
 
 ### Consequences
