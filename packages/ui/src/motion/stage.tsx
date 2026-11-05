@@ -20,8 +20,8 @@ import {
   supportsWebgl2,
   tierFor,
 } from "../lib/quality-tier.ts";
+import { SilentBoundary } from "../lib/silent-boundary.tsx";
 import { useIdle } from "../lib/use-idle.ts";
-import { SceneBoundary } from "../scene/scene-boundary.tsx";
 import { loadStageRuntime } from "../scene/stage-runtime.ts";
 import { StagePlayback } from "./stage-playback.tsx";
 
@@ -230,9 +230,9 @@ export function Stage({
       {tier === null ? null : (
         <StagePlayback controllable={ambient && live} pauseLabel={pauseLabel} playLabel={playLabel}>
           <div aria-hidden className={cn("absolute inset-0", fadeVariants({ shown: live }))}>
-            <SceneBoundary onError={fallBack}>
+            <SilentBoundary onError={fallBack}>
               <Suspense fallback={null}>{renderScene({ tier, onReady })}</Suspense>
-            </SceneBoundary>
+            </SilentBoundary>
           </div>
         </StagePlayback>
       )}

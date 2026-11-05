@@ -191,7 +191,7 @@ export function createSimulation(
   Object.assign(velocity.material.uniforms, { uShapes: { value: layers }, ...uniforms });
   Object.assign(velocity.material.defines, { SHAPES: layers.image.depth, STAGGER: "0.35" });
   Object.assign(position.material.uniforms, { uDelta: uniforms.uDelta });
-  /* Thrown in the effect that creates the simulation (useSceneResource): SceneBoundary catches it and the poster stays. */
+  /* Thrown in the effect that creates the simulation (useSceneResource): SilentBoundary catches it and the poster stays. */
   const error = compute.init();
   if (error !== null) {
     throw new Error(error);
@@ -629,6 +629,6 @@ Why it is shaped this way:
 - The layers, the simulation and the points are made in the effect that disposes them (`useSceneResource`): under StrictMode in development, a `GPUComputationRenderer` created during render and disposed by the first cleanup loses its positions, and the particles restart from the origin. `ParticleFrame` renders once they exist, so `useFirstFrame` reports a drawn frame.
 - Materials are built imperatively (`new ShaderMaterial({ uniforms })`), and the simulation's uniforms are typed objects the materials keep: React Three Fiber 9 copies a `uniforms` prop into new objects, so writes to yours would never reach the GPU.
 - Uniform writes happen in module-level functions (`step`): the React Compiler lint rejects writing to hook values inside `useFrame`. `step` copies the camera position every frame, so the pointer ray stays right when the choreography moves the camera.
-- `createSimulation` throws when the float extension is missing and `init()` fails: the error reaches `SceneBoundary` and the poster stays.
+- `createSimulation` throws when the float extension is missing and `init()` fails: the error reaches `SilentBoundary` and the poster stays.
 - `useLoader(FileLoader, …)` suspends until the shapes arrive; the stage keeps its poster meanwhile. Its result is cached, so it is a stable input of `useSceneResource`.
 - The effect component composes `Stage` like any effect (`shader-craft` `references/effect-skeleton.md`, `ambient` because the shape breathes at rest) and passes `shapes` (URLs per tier, built by the app with `process.env.NEXT_PUBLIC_BASE_PATH`) and `progress` to this scene.

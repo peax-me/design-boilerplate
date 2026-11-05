@@ -473,7 +473,7 @@ import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { SceneBoundary } from "../src/scene/scene-boundary.tsx";
+import { SilentBoundary } from "../src/lib/silent-boundary.tsx";
 import { useSceneResource } from "../src/scene/use-scene-resource.ts";
 
 interface Resource {
@@ -528,9 +528,9 @@ describe("useSceneResource", () => {
   it("sends a failed creation to the error boundary, so the poster stays", async () => {
     const fallBack = vi.fn<() => void>();
     await render(
-      <SceneBoundary onError={fallBack}>
+      <SilentBoundary onError={fallBack}>
         <Probe make={fail} seen={vi.fn<(resource: Resource) => void>()} />
-      </SceneBoundary>,
+      </SilentBoundary>,
     );
 
     await expect.poll(() => fallBack.mock.calls.length).toBe(1);

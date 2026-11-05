@@ -90,7 +90,7 @@ Budget: shape data stays inside the scroll-footage envelope, 6 MB on `full` and 
 
 - **Start state**: every particle at rest on the first shape, with a seed in `w` hashed from its index. The first frame is the first shape, assembled, on every load.
 - **Shapes** are one `DataArrayTexture` (a `sampler2DArray`, one layer per shape, `FloatType`), read at the particle's own texel.
-- **Float targets** need `EXT_color_buffer_float`; without it, `setDataType(HalfFloatType)` (positions inside the unit frame keep about 0.001 precision). If `init()` returns an error, throw it from the effect that creates the simulation (`useSceneResource`): it still reaches `SceneBoundary`, which brings the poster back.
+- **Float targets** need `EXT_color_buffer_float`; without it, `setDataType(HalfFloatType)` (positions inside the unit frame keep about 0.001 precision). If `init()` returns an error, throw it from the effect that creates the simulation (`useSceneResource`): it still reaches `SilentBoundary`, which brings the poster back.
 - **Never read the textures back** in the page (`readPixels`): it stalls the GPU pipeline every frame. Tests may.
 
 **The morph goal** (`MORPH_GOAL` in the shaders module):

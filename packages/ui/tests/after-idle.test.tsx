@@ -51,4 +51,24 @@ describe("AfterIdle", () => {
     load({ default: Later });
     await expect.element(screen.getByText("Later")).toBeVisible();
   });
+
+  it("keeps the page when its lazy child fails to load", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(vi.fn<() => void>());
+    const releaseIdleCallbacks = holdIdleCallbacks();
+    const chunkLost = new Error("The motion chunk failed to load");
+    const LazyLost = lazy(() => Promise.reject(chunkLost));
+    const screen = await render(
+      <>
+        <p>Page</p>
+        <AfterIdle>
+          <LazyLost />
+        </AfterIdle>
+      </>,
+    );
+
+    releaseIdleCallbacks();
+    await expect.poll((): unknown[] => consoleError.mock.calls.flat()).toContain(chunkLost);
+    await expect.element(screen.getByText("Page")).toBeVisible();
+    expect(screen.container.textContent).toBe("Page");
+  });
 });
