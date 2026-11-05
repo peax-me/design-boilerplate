@@ -17,6 +17,8 @@ const blocks: Block[] = [
 
 let releaseIdleCallbacks: () => void;
 
+const ENTRANCE_TIMEOUT = { timeout: 5000 };
+
 function pieceOf(container: HTMLElement, label: string): HTMLElement | null {
   return container.querySelector<HTMLElement>(
     `[data-slot='block-stage']:has([aria-label='${label}']) [data-scene-item='plank']`,
@@ -86,7 +88,8 @@ describe("Motion once the page is idle", () => {
     expect(seen?.style.opacity).toBe("");
 
     unseen?.scrollIntoView();
-    await expect.poll(() => unseen?.style.opacity).toBe("1");
+    /* The entrance lasts duration.slow and its stagger; a busy machine slows the ticker that plays it. */
+    await expect.poll(() => unseen?.style.opacity, ENTRANCE_TIMEOUT).toBe("1");
     expect(seen?.style.opacity).toBe("");
   });
 });
