@@ -17,11 +17,22 @@ const breakpointQuery = {
   md: `(min-width: 48rem) and ${ALLOW_MOTION}`,
 } as const;
 
+/* With motion, the stage sticks to the top of the window: CSS holds it in place, so nothing shifts the layout. */
 const stageVariants = cva("grid grid-cols-1 place-items-center overflow-clip", {
   variants: {
     minWidth: {
-      all: "motion-safe:h-dvh motion-reduce:py-24",
-      md: "py-24 md:motion-safe:h-dvh md:motion-safe:py-0",
+      all: "motion-safe:sticky motion-safe:top-0 motion-safe:h-dvh motion-reduce:py-24",
+      md: "py-24 md:motion-safe:sticky md:motion-safe:top-0 md:motion-safe:h-dvh md:motion-safe:py-0",
+    },
+  },
+});
+
+/* One window of scroll after the stage, during which the stage stays held and the story scrubs. */
+const holdVariants = cva("h-dvh", {
+  variants: {
+    minWidth: {
+      all: "motion-reduce:hidden",
+      md: "hidden md:motion-safe:block",
     },
   },
 });
@@ -42,7 +53,7 @@ export function ScrollScene({
   length = "medium",
   minWidth = "all",
 }: ScrollSceneProps) {
-  const stage = useRef<HTMLDivElement>(null);
+  const track = useRef<HTMLDivElement>(null);
 
   useGSAP(
     () => {
@@ -51,29 +62,33 @@ export function ScrollScene({
           gsap.timeline({
             defaults: { ease: ease.standard },
             scrollTrigger: {
-              trigger: stage.current,
+              trigger: track.current,
               start: "top top",
-              end: `+=${sceneLength[length] * 100}%`,
-              pin: true,
+              end: "bottom bottom",
               scrub,
             },
           }),
         );
       });
     },
-    { scope: stage },
+    { scope: track },
   );
 
   return (
-    <div ref={stage} data-slot="scroll-scene" className={stageVariants({ minWidth })}>
-      {still === undefined ? (
-        children
-      ) : (
-        <>
-          <div className="w-full motion-reduce:hidden">{children}</div>
-          <div className="hidden w-full motion-reduce:block">{still}</div>
-        </>
-      )}
+    <div ref={track} data-slot="scroll-scene">
+      <div className={stageVariants({ minWidth })}>
+        {still === undefined ? (
+          children
+        ) : (
+          <>
+            <div className="w-full motion-reduce:hidden">{children}</div>
+            <div className="hidden w-full motion-reduce:block">{still}</div>
+          </>
+        )}
+      </div>
+      {Array.from({ length: sceneLength[length] }, (_, screen) => (
+        <div key={screen} className={holdVariants({ minWidth })} />
+      ))}
     </div>
   );
 }

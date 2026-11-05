@@ -7,18 +7,21 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useState,
 } from "react";
 
 import { cn } from "../lib/cn.ts";
 import { whenIdle } from "../lib/idle.ts";
 import {
+  implementsWebgl2,
   type QualityTier,
   readDeviceProfile,
   supportsWebgl2,
   tierFor,
 } from "../lib/quality-tier.ts";
 import { SceneBoundary } from "../scene/scene-boundary.tsx";
+import { loadStageRuntime } from "../scene/stage-runtime.ts";
 import { StagePlayback } from "./stage-playback.tsx";
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
@@ -29,6 +32,8 @@ const FIRST_INTERACTIONS = ["pointerdown", "keydown", "wheel", "touchstart", "sc
 
 /* An effect that may have nothing to set up returns no cleanup. */
 type EffectCleanup = (() => void) | undefined;
+
+type PrepareScene = () => Promise<unknown>;
 
 const fadeVariants = cva("transition-opacity duration-500", {
   variants: {
@@ -131,29 +136,53 @@ function usePosterFallback(root: HTMLElement | null): [fellBack: boolean, fallBa
   return [fellBack, fallBack];
 }
 
-/* The tier to run the scene at once the page is idle, motion is allowed, the stage nears the window and, on light devices, the visitor has interacted. */
-function useTriggeredTier(root: HTMLElement | null): QualityTier | null {
+/* Once the scene may load on a device that could run it, three.js, the React renderer and then the scene's own module load, each evaluated in a task of its own: mounting the scene later evaluates no code. A failed preparation still lets the scene mount, and its own load reports the failure. */
+function usePreparedScene(tier: QualityTier | null, prepareScene?: PrepareScene): boolean {
+  const [prepared, setPrepared] = useState(false);
+  const prepare = useEffectEvent(() => prepareScene?.());
+
+  useEffect((): EffectCleanup => {
+    if (tier === null || !implementsWebgl2()) {
+      return undefined;
+    }
+    let mounted = true;
+    function settle(): void {
+      if (mounted) {
+        setPrepared(true);
+      }
+    }
+    loadStageRuntime()
+      .then(() => prepare())
+      .then(settle, settle);
+    return () => {
+      mounted = false;
+    };
+  }, [tier]);
+
+  return prepared;
+}
+
+/* The tier the scene may load at once the page is idle and motion is allowed: on light devices, only once the visitor has interacted, so a page load alone loads nothing. */
+function useLoadingTier(): QualityTier | null {
   const tier = useIdleTier();
-  const near = useNearWindow(root, tier !== null);
   const interacted = useFirstInteraction();
 
-  if (tier === null || !near) {
-    return null;
-  }
   if (tier === "light" && !interacted) {
     return null;
   }
   return tier;
 }
 
-/* The tier to run the scene at once every trigger has fired and the device can create a WebGL2 context. Creating a context is the costliest probe: it is made only for a scene about to mount, so a page that never loads one never pays for it. Without WebGL2 the poster stays for the life of the page. */
-function useSceneTier(root: HTMLElement | null): QualityTier | null {
-  const triggeredTier = useTriggeredTier(root);
+/* The tier to run the scene at once it may load, is prepared, nears the window and the device can create a WebGL2 context. Creating a context is the costliest probe: it is made only for a scene about to mount, so a page that never loads one never pays for it. Without WebGL2 the poster stays for the life of the page. */
+function useSceneTier(root: HTMLElement | null, prepareScene?: PrepareScene): QualityTier | null {
+  const tier = useLoadingTier();
+  const prepared = usePreparedScene(tier, prepareScene);
+  const near = useNearWindow(root, tier !== null);
 
-  if (triggeredTier === null || !supportsWebgl2()) {
+  if (tier === null || !prepared || !near || !supportsWebgl2()) {
     return null;
   }
-  return triggeredTier;
+  return tier;
 }
 
 export interface SceneProps {
@@ -166,6 +195,8 @@ interface StageProps {
   poster: ReactNode;
   /* Renders a lazy component holding a StageCanvas; it calls onReady once its first frame is drawn. */
   renderScene: (props: SceneProps) => ReactNode;
+  /* Makes the import the lazy component makes, ahead of time: the stage calls it once the scene may load, before it nears the window, and mounts the scene once it settles. */
+  prepareScene?: PrepareScene;
   /* The scene moves on its own: the motion audit expects its frames to change, and once live it gets a control to pause it (WCAG 2.2.2). */
   ambient?: boolean;
   /* Names of that control, after the action it performs. */
@@ -178,6 +209,7 @@ interface StageProps {
 export function Stage({
   poster,
   renderScene,
+  prepareScene,
   ambient = false,
   pauseLabel = "Pause animation",
   playLabel = "Play animation",
@@ -188,7 +220,7 @@ export function Stage({
   const onReady = useCallback(() => {
     setReady(true);
   }, []);
-  const triggeredTier = useSceneTier(root);
+  const triggeredTier = useSceneTier(root, prepareScene);
   const [fellBack, fallBack] = usePosterFallback(root);
   const tier = fellBack ? null : triggeredTier;
   const live = tier !== null && ready;

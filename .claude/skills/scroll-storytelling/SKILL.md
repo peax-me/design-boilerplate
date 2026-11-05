@@ -77,6 +77,7 @@ Rules:
 - Target elements with `data-scene-item` attributes; selectors are scoped to the scene.
 - Animate `transform` and `opacity` only; the one exception is the short-text blur of §5. Durations, easings and staggers come from `@repo/ui/motion/tokens`; add a token there rather than a magic number.
 - One `ScrollTrigger` per scene (the one `ScrollScene` creates). Nested timelines, not nested triggers.
+- `ScrollScene` holds its stage with CSS (`sticky` in a track one window taller per screen of `length`) and scrubs the track, so a scene shifts no layout. Never add `pin` to a trigger: a pin switches the element to `position: fixed` and inserts a spacer, which field CLS counts as layout shift even when nothing visibly jumps.
 - A scene that hosts a WebGL stage tweens the page's `{ value }` progress object and never the stage's internals (`shader-craft` §3).
 - A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill.
 

@@ -1,4 +1,6 @@
+import { useFrame } from "@react-three/fiber";
 import { gsap } from "gsap";
+import { useRef } from "react";
 import { afterEach, describe, expect, it, type Mock, onTestFinished, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -42,6 +44,26 @@ function Stage({ tier, onFrame, spacer, paused = false, width = STAGE.width }: S
         </StageCanvas>
       </div>
     </StagePlaybackContext>
+  );
+}
+
+/* A lit box that reports how many shader programs the renderer holds when its first frame is drawn. */
+function FirstFramePrograms({ onFirstFrame }: { onFirstFrame: (programs: number) => void }) {
+  const drawn = useRef(false);
+
+  useFrame((state) => {
+    if (drawn.current) {
+      return;
+    }
+    drawn.current = true;
+    onFirstFrame(state.gl.info.programs?.length ?? 0);
+  });
+
+  return (
+    <mesh>
+      <boxGeometry />
+      <meshStandardMaterial />
+    </mesh>
   );
 }
 
@@ -99,6 +121,20 @@ describe("StageCanvas", () => {
     await render(<Stage tier="full" onFrame={onFrame} />);
 
     await expect.poll(() => onFrame.mock.calls.length, RENDER_TIMEOUT).toBeGreaterThan(0);
+  });
+
+  it("compiles the scene's shader programs before drawing its first frame", async () => {
+    const onFirstFrame = vi.fn<(programs: number) => void>();
+    await render(
+      <div style={STAGE}>
+        <StageCanvas tier="full">
+          <FirstFramePrograms onFirstFrame={onFirstFrame} />
+        </StageCanvas>
+      </div>,
+    );
+
+    await expect.poll(() => onFirstFrame.mock.calls.length, RENDER_TIMEOUT).toBe(1);
+    expect(onFirstFrame.mock.lastCall?.[0]).toBeGreaterThan(0);
   });
 
   it("moves every frame by at most 0.1 s, the first one included, on a scene mounted late", async () => {

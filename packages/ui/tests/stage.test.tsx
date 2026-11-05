@@ -7,6 +7,7 @@ import { page } from "vitest/browser";
 import type { SceneProps } from "../src/motion/stage.tsx";
 import { LIVE_TIMEOUT } from "../stories/support/live-timeout.ts";
 import { afterIdle, BoxStage, stageAt } from "./support/box-stage.tsx";
+import { holdIdleCallbacks } from "./support/idle-callbacks.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 import { DESKTOP, PHONE } from "./support/viewports.ts";
 
@@ -48,17 +49,6 @@ function boxOf(element: Element | null | undefined): unknown {
 
 function tierIn(element: HTMLElement): string | undefined {
   return element.querySelector<HTMLElement>("[data-tier]")?.dataset["tier"];
-}
-
-/* Keeps the page's idle callbacks until the returned function runs them. */
-function holdIdleCallbacks(): () => void {
-  const held: IdleRequestCallback[] = [];
-  vi.spyOn(window, "requestIdleCallback").mockImplementation((task) => held.push(task));
-  return () => {
-    for (const task of held.splice(0)) {
-      task({ didTimeout: false, timeRemaining: () => 0 });
-    }
-  };
 }
 
 async function renderLive(name: string) {

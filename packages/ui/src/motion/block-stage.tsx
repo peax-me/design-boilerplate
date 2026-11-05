@@ -14,8 +14,13 @@ gsap.registerPlugin(useGSAP);
 const ALLOW_MOTION = "(prefers-reduced-motion: no-preference)";
 const DROP = -3;
 
+/* One import for the stage to prepare and the lazy scene to render. */
+function loadBlockScene() {
+  return import("../scene/block-scene.tsx");
+}
+
 const LazyBlockScene = lazy(async () => {
-  const { BlockScene } = await import("../scene/block-scene.tsx");
+  const { BlockScene } = await loadBlockScene();
   return { default: BlockScene };
 });
 
@@ -48,6 +53,7 @@ export function BlockStage({ blocks, label, grain, className }: BlockStageProps)
     <div ref={drawing} data-slot="block-stage" className={className}>
       <Stage
         poster={<IsoBlocks blocks={blocks} label={label} grain={grain} />}
+        prepareScene={loadBlockScene}
         renderScene={(scene) => (
           <LazyBlockScene {...scene} blocks={blocks} grain={grain} className="absolute -inset-12" />
         )}

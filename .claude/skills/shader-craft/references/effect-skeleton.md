@@ -19,8 +19,13 @@ import { lazy, type ReactElement, type ReactNode } from "react";
 
 import { Stage } from "./stage.tsx";
 
+/* One import for the stage to prepare and the lazy scene to render. */
+function loadEffectScene() {
+  return import("../scene/effect-scene.tsx");
+}
+
 const LazyEffectScene = lazy(async () => {
-  const { EffectScene } = await import("../scene/effect-scene.tsx");
+  const { EffectScene } = await loadEffectScene();
   return { default: EffectScene };
 });
 
@@ -60,6 +65,7 @@ export function EffectStage({
         ambient
         className={stageVariants({ fit })}
         poster={poster}
+        prepareScene={loadEffectScene}
         renderScene={(scene) => (
           <LazyEffectScene {...scene} progress={progress} posterAspect={posterAspect} />
         )}

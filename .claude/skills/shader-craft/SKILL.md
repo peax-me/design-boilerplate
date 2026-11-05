@@ -337,7 +337,7 @@ Budgets are global: Lighthouse ≥ 0.95 on mobile and desktop for every route, a
 | Full-screen shaders per viewport                          | one                                          | one             |
 | Octaves, warp levels, dispersion and ray samples, palette | the same on both tiers: they shape the image | the same        |
 
-Cost scales with pixels × work per pixel: at `full`, a 1440×900 stage is 5.2 million pixels per pass. When `light` is too slow, lower the cost knobs, then simplify the look for both tiers; never fork the look per tier. When the trace shows a long first frame, the culprit is usually shader compilation: precompile with `gl.compileAsync(scene, camera)` before the first render and cut loop sizes.
+Cost scales with pixels × work per pixel: at `full`, a 1440×900 stage is 5.2 million pixels per pass. When `light` is too slow, lower the cost knobs, then simplify the look for both tiers; never fork the look per tier. `StageCanvas` compiles the scene's programs with `gl.compileAsync(scene, camera)` before its first frame, and `Stage` loads three.js, the React renderer and the scene module (`prepareScene`) before it mounts the scene: effect authors call neither. When the trace still shows a long first frame, look at what the scene builds on mount (geometry, textures, token reads) and cut loop sizes.
 
 ## 10. Licences
 

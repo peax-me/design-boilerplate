@@ -30,6 +30,11 @@ export function supportsWebgl2(): boolean {
   return webgl2Supported;
 }
 
+/* Whether the browser implements WebGL2 at all, answered without a context: enough to prepare a scene that may mount. */
+export function implementsWebgl2(): boolean {
+  return typeof globalThis.WebGL2RenderingContext === "function";
+}
+
 function matches(query: string): boolean {
   return window.matchMedia(query).matches;
 }

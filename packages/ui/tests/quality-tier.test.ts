@@ -96,6 +96,25 @@ describe("supportsWebgl2", () => {
   });
 });
 
+describe("implementsWebgl2", () => {
+  it("answers from the API alone, without creating a context", async () => {
+    const createElement = stubDevice();
+    vi.stubGlobal("WebGL2RenderingContext", vi.fn<() => void>());
+    const { implementsWebgl2 } = await freshQualityTier();
+
+    expect(implementsWebgl2()).toBe(true);
+    expect(createElement).not.toHaveBeenCalled();
+  });
+
+  it("answers no where the browser lacks the API", async () => {
+    stubDevice();
+    vi.stubGlobal("WebGL2RenderingContext", null);
+    const { implementsWebgl2 } = await freshQualityTier();
+
+    expect(implementsWebgl2()).toBe(false);
+  });
+});
+
 describe("pixelRatio", () => {
   it("caps the light tier lower than the full tier", () => {
     expect(pixelRatio).toStrictEqual({ light: [1, 1.5], full: [1, 2] });

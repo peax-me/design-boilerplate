@@ -7,8 +7,18 @@ import { CodeBlock } from "../src/components/code-block.tsx";
 import { CodeLine } from "../src/components/code-line.tsx";
 import { Container } from "../src/layout/container.tsx";
 import { ScrollScene } from "../src/motion/scroll-scene.tsx";
+import { sceneLength } from "../src/motion/tokens.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 import { DESKTOP, PHONE } from "./support/viewports.ts";
+
+/* The scroll distance a scene holds its stage for: its height beyond its stage's. */
+function holdOf(container: HTMLElement): number {
+  const scene = container.querySelector("[data-slot='scroll-scene']");
+  const stage = scene?.firstElementChild;
+  return (
+    (scene?.getBoundingClientRect().height ?? 0) - (stage?.getBoundingClientRect().height ?? 0)
+  );
+}
 
 afterEach(async () => {
   await allowMotion();
@@ -16,19 +26,6 @@ afterEach(async () => {
 });
 
 describe("ScrollScene", () => {
-  it("pins the stage and hands a scrubbed timeline to the choreography", async () => {
-    const choreography = vi.fn<(timeline: gsap.core.Timeline) => void>();
-    const screen = await render(
-      <ScrollScene choreography={choreography}>
-        <p>Scene content</p>
-      </ScrollScene>,
-    );
-
-    await expect.element(screen.getByText("Scene content")).toBeVisible();
-    expect(choreography).toHaveBeenCalledOnce();
-    expect(screen.container.querySelector(".pin-spacer")).not.toBeNull();
-  });
-
   it("renders the final state without choreography when the user prefers reduced motion", async () => {
     await preferReducedMotion();
     const choreography = vi.fn<(timeline: gsap.core.Timeline) => void>();
@@ -40,7 +37,7 @@ describe("ScrollScene", () => {
 
     await expect.element(screen.getByText("Static content")).toBeVisible();
     expect(choreography).not.toHaveBeenCalled();
-    expect(screen.container.querySelector(".pin-spacer")).toBeNull();
+    expect(holdOf(screen.container)).toBe(0);
   });
 
   it("keeps the final state on small screens when the scene starts at a breakpoint", async () => {
@@ -54,7 +51,7 @@ describe("ScrollScene", () => {
 
     await expect.element(screen.getByText("Phone content")).toBeVisible();
     expect(choreography).not.toHaveBeenCalled();
-    expect(screen.container.querySelector(".pin-spacer")).toBeNull();
+    expect(holdOf(screen.container)).toBe(0);
   });
 
   it("plays the choreography from the breakpoint up", async () => {
@@ -68,6 +65,7 @@ describe("ScrollScene", () => {
 
     await expect.element(screen.getByText("Desktop content")).toBeVisible();
     expect(choreography).toHaveBeenCalledOnce();
+    expect(holdOf(screen.container)).toBeCloseTo(sceneLength.medium * window.innerHeight, 0);
   });
 
   it("keeps content within a phone screen when a code line is long", async () => {

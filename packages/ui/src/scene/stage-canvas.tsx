@@ -2,7 +2,7 @@
 
 import { Canvas, type CanvasProps, type RootState, useStore, useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
-import { use, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 
 import { pixelRatio, type QualityTier } from "../lib/quality-tier.ts";
 import { StagePlaybackContext } from "../motion/stage-playback-context.ts";
@@ -65,6 +65,32 @@ function HeldFrame(): null {
   return null;
 }
 
+/* The scene's shader programs compile before its first frame, in parallel where the GPU allows it (KHR_parallel_shader_compile): that frame, and the onReady it fires, draw without a compile stall. */
+function CompiledFrames({ paused }: { paused: boolean }) {
+  const get = useThree((state) => state.get);
+  const [compiled, setCompiled] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function compile(): Promise<void> {
+      const { gl, scene, camera } = get();
+      await gl.compileAsync(scene, camera);
+      if (mounted) {
+        setCompiled(true);
+      }
+    }
+    void compile();
+    return () => {
+      mounted = false;
+    };
+  }, [get]);
+
+  if (!compiled) {
+    return null;
+  }
+  return paused ? <HeldFrame /> : <TickerFrames />;
+}
+
 interface StageCanvasProps extends Omit<CanvasProps, "dpr" | "frameloop" | "gl"> {
   tier: QualityTier;
 }
@@ -79,7 +105,7 @@ export function StageCanvas({ tier, children, ...canvasProps }: StageCanvasProps
       frameloop="never"
       gl={{ antialias: tier === "full" }}
     >
-      {paused ? <HeldFrame /> : <TickerFrames />}
+      <CompiledFrames paused={paused} />
       {children}
     </Canvas>
   );
