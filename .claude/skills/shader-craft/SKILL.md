@@ -19,6 +19,8 @@ A live shader earns its place when the page sells something felt rather than ins
 
 Shapes that transform belong to `gpu-particles`, real places to `cinematic-footage`, objects to inspect to `scene-3d`. If a still or a short loop tells the same story, use it.
 
+An orb, a lens or a crystal earns its row when it explains something, such as a lens that focuses the product or a crystal that splits its light. A decorative glowing orb in the hero is the cliché that `motion-review` §3 scores 1.
+
 ## 2. Where the code lives
 
 | File                                          | Holds                                                                                        |

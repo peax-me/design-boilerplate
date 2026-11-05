@@ -9,7 +9,7 @@ Long animations that feel effortless come from a storyboard, not from effects. E
 
 ## 1. Budget
 
-Per page: two or three scenes, one of them the signature moment. Everything else stays still or uses short CSS transitions. A scene lasts one to three screens of scroll (`length="short" | "medium" | "long"`); longer pins feel like a trap.
+Per page: two or three scenes, one of them the signature moment. When only one beat of the copy has a sequence, a cause or a continuity to show (§2), the page has that one scene, the signature, rather than a thin second one. Everything else stays still or uses short CSS transitions. A scene lasts one to three screens of scroll (`length="short" | "medium" | "long"`); longer pins feel like a trap.
 
 ## 2. Map beats to scenes
 
@@ -36,11 +36,12 @@ Choreography:
   30–70%  …
   70–100% …
 Why: <what the motion explains>
+Stage (a scene with a WebGL stage): ambient | not ambient; pointer: <what it does> | none, because <reason>
 ```
 
 **Interactive:** get the user's approval before coding.
 
-**Autonomous** (a run started by the `signature-experience` skill from a brief, ADR-0028): do not wait. Record the blocks under `### Storyboard` in the page's `## Page: <name>` section of `DESIGN.md`, check them yourself, and code. The check: the page has two or three scenes and one signature moment (§1); each scene shows a sequence, a cause or a continuity (§2); each lasts one to three screens; the final state is a complete composition; durations, easings and staggers are tokens; the `Why` names what the motion explains. Fix what fails, note the fix in the block, and go on.
+**Autonomous** (a run started by the `signature-experience` skill from a brief, ADR-0028): do not wait. Record the blocks under `### Storyboard` in the page's `## Page: <name>` section of `DESIGN.md`, check them yourself, and code. The check: the page keeps the budget of §1 and has one signature moment; each scene shows a sequence, a cause or a continuity (§2); each lasts one to three screens; the final state is a complete composition; durations, easings and staggers are tokens; the `Why` names what the motion explains. Fix what fails, note the fix in the block, and go on.
 
 ## 4. Build
 

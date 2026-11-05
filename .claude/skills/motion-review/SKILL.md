@@ -1,6 +1,6 @@
 ---
 name: motion-review
-description: Capture and judge an animated page the way a visitor sees it. Captures are the e2e frame attachments, a Playwright MCP video of a scripted scroll with its ffmpeg contact sheet and arrival strips, frame times and a Chrome DevTools trace with the CPU slowed 4× on the real GPU (95th percentile ≤ 20 ms, no long animation frame over 100 ms), reduced motion and a 390×844 phone. The judgement is a ten-criterion grid scored 1 to 5 against the project's own references, then fix and re-capture, five rounds at most. Use after building or changing a scroll scene, a WebGL stage, a shader, particles, footage or a 3D scene, when a page "feels off", or when asked to review, record or measure motion.
+description: Capture and judge an animated page the way a visitor sees it. Captures are the e2e frame attachments, a Playwright MCP video of a scripted scroll with its ffmpeg contact sheet and arrival strips, frame times and a Chrome DevTools trace with the CPU slowed 4× on the real GPU (95th percentile ≤ 20 ms, no long animation frame over 100 ms, layout shift ≤ 0.1), reduced motion and a 390×844 phone. The judgement is a ten-criterion grid scored 1 to 5 against the project's own references, then fix and re-capture, five rounds at most. Use after building or changing a scroll scene, a WebGL stage, a shader, particles, footage or a 3D scene, when a page "feels off", or when asked to review, record or measure motion.
 ---
 
 # Motion review
@@ -9,9 +9,18 @@ A still cannot tell a calm canvas from a frozen one, a good ease from a linear o
 
 ## 1. Before capturing
 
-- **Read what the page promised.** `DESIGN.md`: the direction, its do and don't, the References board, and under `## Page: <name>` the `### Storyboard`: what each scene explains (`Why`), its length and its final state. The grid judges the page against these, not against taste.
+- **Read what the page promised.** `DESIGN.md`: the direction, its do and don't, the References board, and under `## Page: <name>` the `### Storyboard`: what each scene explains (`Why`), its length, its final state, whether its stage is ambient and what the pointer does. The grid judges the page against these, not against taste.
 - **References are the project's own.** Compare only with the links on the `DESIGN.md` board and their captures in `.context/` (`design-inspiration`), on the principle the board says to take from each one. Those captures are never versioned, and this skill holds no image: the grid states the expected level in words. Comparing with third-party templates side by side is the user's judgement, never an input here, because copying their look is the failure the grid looks for.
-- **Production build, local server.** `pnpm --filter @repo/web build`, then `pnpm --filter @repo/web start --port <port>` (no `--` before `--port`: pnpm passes it on and `next start` takes it for a directory). Wait for the server with the bounded loop of `shader-craft` `references/capture-stage.md`, and stop only the server you started. Never `pnpm dev`: development mode runs effects twice, ships unminified React and HMR, so its frame times and console are not the shipped page's. A local Conductor workspace owns ten ports from `CONDUCTOR_PORT`, and the dev server, Storybook and e2e take the first three (ADR 0017), so use `$((CONDUCTOR_PORT + 3))`.
+- **Production build, local server.** Never `pnpm dev`: development mode runs effects twice, ships unminified React and HMR, so its frame times and console are not the shipped page's. A local Conductor workspace owns ten ports from `CONDUCTOR_PORT`, and the dev server, Storybook and e2e take the first three (ADR 0017). Take the fourth, or 3003 outside Conductor. Write no `--` before `--port`: pnpm passes it on, and `next start` takes it for a directory. Wait with the bounded loop of `shader-craft` `references/capture-stage.md`, and stop only the server you started:
+
+  ```bash
+  port=$(( ${CONDUCTOR_PORT:-3000} + 3 ))
+  pnpm --filter @repo/web build
+  pnpm --filter @repo/web start --port "$port" &
+  server=$!
+  # … wait for http://localhost:$port/ as capture-stage.md does, capture, then:
+  kill "$server"
+  ```
 - **Page scripts only against that server.** `browser_evaluate` and `evaluate_script` run any JavaScript in the page. Permissions allow both tools wholesale and cannot filter by URL (ADR-0028), so the rule lives here: never on a third-party URL. The snippets below throw outside `localhost`.
 - **One folder per round:** `.context/motion-review/<page>/round-<n>/`. `.context/` is gitignored. Recordings, sheets and traces are heavy and can be regenerated, so they are never versioned.
 
@@ -46,7 +55,13 @@ One clip per condition, so that each sheet shows one thing: `scroll-desktop` at 
 
 Never call `browser_video_chapter` or `browser_video_show_actions` while recording. A chapter is a full-screen card on a blurred backdrop, and action callouts draw on the page. Both land in the sheet as if the page drew them.
 
-The scroll snippet waits until the stages in the window are live (it nudges the scroll, because `light` waits for a first interaction), then scrolls the whole page at a constant 1.2 s per screen, measuring every frame. Use the same function for the recording and for the measurement (§2.4):
+The same snippet serves the recording and the verdict (§2.4). It works in three phases:
+
+1. It returns to the top, since a reload restores the last scroll position, and it starts its observers before anything else, so every stage load is counted.
+2. It waits for the stages in the window to go live, nudging the scroll because `light` loads on a first interaction. The long frames of that load count, because a phone meets them on its first scroll.
+3. It scrolls the whole page at a constant 1.2 s per screen, measuring every frame and every layout shift. Whenever a stage in the window is not live yet, the scroll holds, still measuring, until it is.
+
+The holds matter. A scene draws its first frame only on screen, so a continuous scroll can pass a stage before it goes live. The run would then measure a page without its scenes, and the recording would show posters only.
 
 ```js
 async () => {
@@ -56,58 +71,108 @@ async () => {
   if (!PerformanceObserver.supportedEntryTypes.includes("long-animation-frame")) {
     throw new Error("Long animation frames need Chrome 123 or later");
   }
-  const inWindow = () =>
-    [...document.querySelectorAll("[data-slot=stage]")].filter((stage) => {
-      const { top, bottom } = stage.getBoundingClientRect();
-      return bottom > 0 && top < innerHeight;
-    });
-  const deadline = performance.now() + 20000;
-  while (inWindow().some((stage) => stage.dataset.stage !== "live")) {
+  const HOLD_LIMIT_MS = 20000;
+  const SECONDS_PER_SCREEN = 1.2;
+  scrollTo(0, 0);
+  const longFrames = [];
+  const shifts = [];
+  const record = (entries) => {
+    for (const entry of entries) {
+      if (entry.entryType === "long-animation-frame") longFrames.push(Math.round(entry.duration));
+      else if (!entry.hadRecentInput) shifts.push(entry);
+    }
+  };
+  const observer = new PerformanceObserver((list) => record(list.getEntries()));
+  observer.observe({ type: "long-animation-frame" });
+  observer.observe({ type: "layout-shift" });
+  const visible = new Set();
+  const watcher = new IntersectionObserver((entries) => {
+    for (const { target, isIntersecting } of entries) {
+      if (isIntersecting) visible.add(target);
+      else visible.delete(target);
+    }
+  });
+  for (const stage of document.querySelectorAll("[data-slot=stage]")) watcher.observe(stage);
+  const waiting = () => [...visible].some((stage) => stage.dataset.stage !== "live");
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const deadline = performance.now() + HOLD_LIMIT_MS;
+  while (waiting()) {
     if (performance.now() > deadline) throw new Error("A stage in the window never went live");
     scrollTo(0, scrollY === 0 ? 1 : 0);
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   scrollTo(0, 0);
-  const SECONDS_PER_SCREEN = 1.2;
   const scrollable = document.documentElement.scrollHeight - innerHeight;
   const duration = Math.max(scrollable / innerHeight, 1) * SECONDS_PER_SCREEN * 1000;
-  const longFrames = [];
-  const observer = new PerformanceObserver((list) => {
-    longFrames.push(...list.getEntries().map((entry) => Math.round(entry.duration)));
-  });
-  observer.observe({ type: "long-animation-frame" });
   const deltas = [];
-  await new Promise((resolve) => {
-    let start;
+  let held = 0;
+  await new Promise((resolve, reject) => {
     let previous;
+    let scrolled = 0;
+    let heldSince;
     const step = (now) => {
-      start ??= now;
-      if (previous !== undefined) deltas.push(now - previous);
+      if (previous !== undefined) {
+        deltas.push(now - previous);
+        if (!waiting()) {
+          scrolled += now - previous;
+          heldSince = undefined;
+        } else {
+          held += now - previous;
+          heldSince ??= now;
+          if (now - heldSince > HOLD_LIMIT_MS) return reject(new Error("A stage in the window never went live"));
+        }
+      }
       previous = now;
-      const progress = Math.min((now - start) / duration, 1);
+      const progress = Math.min(scrolled / duration, 1);
       scrollTo(0, progress * scrollable);
       if (progress < 1) requestAnimationFrame(step);
       else resolve();
     };
     requestAnimationFrame(step);
   });
-  longFrames.push(...observer.takeRecords().map((entry) => Math.round(entry.duration)));
+  watcher.disconnect();
+  record(observer.takeRecords());
   observer.disconnect();
+  let layoutShift = 0;
+  let session = { value: 0, start: 0, last: -Infinity };
+  for (const { startTime, value } of shifts) {
+    if (startTime - session.last > 1000 || startTime - session.start > 5000) {
+      session = { value: 0, start: startTime, last: startTime };
+    }
+    session = { ...session, value: session.value + value, last: startTime };
+    layoutShift = Math.max(layoutShift, session.value);
+  }
   deltas.sort((first, second) => first - second);
   const p95 = deltas[Math.ceil(deltas.length * 0.95) - 1];
   return {
-    seconds: Math.round(duration / 100) / 10,
+    seconds: Math.round((duration + held) / 100) / 10,
+    heldSeconds: Math.round(held / 100) / 10,
     frames: deltas.length,
     p95FrameMs: Math.round(p95 * 10) / 10,
     longFramesMs: longFrames,
-    pass: p95 <= 20 && Math.max(0, ...longFrames) <= 100,
+    layoutShift: Math.round(layoutShift * 1000) / 1000,
+    frameBudgetPass: p95 <= 20 && Math.max(0, ...longFrames) <= 100,
   };
 }
 ```
 
-`longFramesMs` lists every long animation frame (50 ms and over); only those above 100 ms fail.
+- `longFramesMs` lists every long animation frame (50 ms and over). Only those above 100 ms fail the frame budget.
+- `layoutShift` is the largest session window of shifts during the run, computed the way CLS is. Lenis turns wheel input into the same scroll writes as the snippet, so a real wheel scroll gives the same figure. Field CLS counts the whole visit, scrolls included, so a shift above 0.1 marks the page as poor in Core Web Vitals even when the recording shows no jump, as with a pin switching layout. It caps criterion 9 at 2, and the fix belongs to `scroll-storytelling` (its scenes allow no layout shift, §6). A shift the strip does show also scores criterion 4 at 3 or less. The trace names the shifted element (§2.4).
 
-The pointer clip: centre the signature stage in the window (`browser_evaluate` with `() => document.querySelectorAll("[data-slot=stage]")[<index>].scrollIntoView({ block: "center" })`), start the video, run the sweep, then stop. The sweep draws a figure eight over the window for 4 s, then holds still for 2 s, which gives the clip both the pointer response and the scene at rest. Scenes listen to `pointermove` on `window` for mouse pointers only, and the dispatched events bubble there:
+The pointer clip: centre the signature stage and wait until it is live (the snippet below, with its index among the page's stages), then start the video, run the sweep, and stop.
+
+```js
+async () => {
+  const STAGE_INDEX = 0;
+  const stage = document.querySelectorAll("[data-slot=stage]")[STAGE_INDEX];
+  stage.scrollIntoView({ block: "center" });
+  const deadline = performance.now() + 20000;
+  while (stage.dataset.stage !== "live") {
+    if (performance.now() > deadline) throw new Error("The stage never went live");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+``` The sweep draws a figure eight over the window for 4 s, then holds still for 2 s, which gives the clip both the pointer response and the scene at rest. Scenes listen to `pointermove` on `window` for mouse pointers only, and the dispatched events bubble there:
 
 ```js
 async () => {
@@ -165,22 +230,24 @@ SwiftShader and headless timings mean nothing, so measure in the headed Chrome t
 1. `mcp__chrome-devtools__new_page` with the local URL, which returns the `pageId`.
 2. `mcp__chrome-devtools__emulate` with `cpuThrottlingRate: 4`, `prefersReducedMotion: "no-preference"`, and `viewport: "1440x900x2"` (`full`) or `"390x844x3,mobile,touch"` (`light`). Each call replaces every emulation setting, so pass them together.
 3. `mcp__chrome-devtools__navigate_page` with `type: "reload"`. The stage picks its tier at load, so the emulation has to come before it.
-4. `mcp__chrome-devtools__evaluate_script` reads the renderer. If it names SwiftShader, llvmpipe or a software renderer, the numbers are void: never pass `--headless` to the server, and measure on a machine with a GPU.
+4. `mcp__chrome-devtools__evaluate_script` reads the renderer from a throwaway context and releases it, so the page's own stages keep the GPU to themselves. If it names SwiftShader, llvmpipe or a software renderer, the numbers are void: never pass `--headless` to the server, and measure on a machine with a GPU.
 
    ```js
    () => {
-     const context = document.createElement("canvas").getContext("webgl2");
+     const context = new OffscreenCanvas(1, 1).getContext("webgl2");
      const extension = context?.getExtension("WEBGL_debug_renderer_info");
-     return extension ? String(context.getParameter(extension.UNMASKED_RENDERER_WEBGL)) : "unknown";
+     const renderer = extension ? String(context.getParameter(extension.UNMASKED_RENDERER_WEBGL)) : "unknown";
+     context?.getExtension("WEBGL_lose_context")?.loseContext();
+     return renderer;
    }
    ```
 
-5. `mcp__chrome-devtools__evaluate_script` with the scroll snippet of §2.2. This untraced pass is the verdict: p95 ≤ 20 ms and no long animation frame above 100 ms.
-6. Reload, then `mcp__chrome-devtools__performance_start_trace` with `reload: false` and `autoStop: false`, the scroll snippet again, and `mcp__chrome-devtools__performance_stop_trace` with an absolute `filePath` to `<dir>/trace-<tier>.json.gz`. The trace explains a failure: tracing adds overhead, so never use it for the verdict. Open the insights it lists with `mcp__chrome-devtools__performance_analyze_insight`, copying the `insightSetId` and `insightName` exactly. A layout shift reported during the scripted scroll is usually a pin switching to `fixed`, because a script scroll is not user input. Load-time CLS is Lighthouse's job, so chase a scroll shift only if the recording shows content jumping.
+5. `mcp__chrome-devtools__evaluate_script` with the scroll snippet of §2.2. This untraced pass is the verdict: p95 ≤ 20 ms and no long animation frame above 100 ms, every stage load included, and its `layoutShift`.
+6. Reload, then `mcp__chrome-devtools__performance_start_trace` with `reload: false` and `autoStop: false`, the scroll snippet again, and `mcp__chrome-devtools__performance_stop_trace` with an absolute `filePath` to `<dir>/trace-<tier>.json.gz`. The trace explains a failure: tracing adds overhead, so never use it for the verdict. Open the insights it lists with `mcp__chrome-devtools__performance_analyze_insight`, copying the `insightSetId` and `insightName` exactly. `CLSCulprits` names the element behind a scroll-time shift; a scene's pin is the usual one.
 7. `mcp__chrome-devtools__list_console_messages` with `types: ["error", "warn"]`. Only WebGL and shader messages count, as in the audit.
 8. Reset with `mcp__chrome-devtools__emulate` and the `pageId` alone, then `mcp__chrome-devtools__close_page`.
 
-Record per tier in the round: renderer, `seconds`, `frames`, `p95FrameMs`, `longFramesMs`.
+Record per tier in the round: renderer, `seconds`, `frames`, `p95FrameMs`, `longFramesMs`, `layoutShift`.
 
 ### 2.5 Reduced motion and the phone
 
@@ -192,26 +259,26 @@ Record per tier in the round: renderer, `seconds`, `frames`, `p95FrameMs`, `long
 
 Ten criteria, each scored 1 to 5. The expected level is that of a hand-made studio site: deliberate, specific to this brand, finished in every frame.
 
-| Score | Meaning                                                                         |
-| ----- | ------------------------------------------------------------------------------- |
+| Score | Meaning                                                                           |
+| ----- | --------------------------------------------------------------------------------- |
 | 5     | At or above the best reference on the board for this criterion; nothing to change |
-| 4     | At the references' level; flaws only visible frame by frame                     |
-| 3     | Competent but generic, or one flaw a visitor would notice                       |
-| 2     | A defect a visitor notices at once                                              |
-| 1     | Absent or broken                                                                |
+| 4     | At the references' level; flaws only visible frame by frame                       |
+| 3     | Competent but generic, or one flaw a visitor would notice                         |
+| 2     | A defect a visitor notices at once                                                |
+| 1     | Absent or broken                                                                  |
 
-| Criterion                | A 5 looks like                                                                                                                                                                                                 | It scores 3 or less when                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 1. Message legibility    | The first viewport states the offer and the primary action at a glance, before any motion completes. The copy reads over the effect on every frame and tier, and the effect frames the message rather than competing with it | The copy fights the effect, the veil fails on some frame, the headline waits for an animation, or a message lives only in the canvas |
-| 2. One signature idea    | One moment a visitor can retell in one sentence, and that sentence names the product's mechanism or promise (the storyboard's `Why`). The other scenes lead to it or echo it | Two effects compete, removing the moment would lose nothing, or the effect would fit another product unchanged |
-| 3. Depth and light       | Planes that separate in motion; light with a source, a direction and falloff; glow only on hot cores; dark gradients without banding; grain where the direction wants a shot rather than a render | Flat single plane, light from nowhere, over-bright bloom turning the frame to haze, banding |
-| 4. Curves and arrivals   | Every element decelerates into its resting state (the strip's spacing shrinks); phases overlap so a scene reads as one gesture; eases and durations come from tokens; the scrub never steps; the poster-to-canvas crossfade is invisible | Linear starts or stops, pops, every element arriving at once with nothing leading, a jump or stutter in a strip, overshoot the direction did not ask for |
-| 5. Life at rest          | When the scroll stops, the signature keeps breathing, slowly enough to read the copy over it, with no visible loop seam. An ambient stage has its pause control, and pausing holds the frame | Frozen, restless enough to pull the eye from the copy, a visible seam, or an ambient stage with no pause control |
-| 6. Pointer response      | The scene answers the mouse with weight (smoothed, slightly behind), in proportion, and the answer means something: the light follows, the matter parts. A touch does nothing because the finger scrolls, and the wheel is never captured | No response on desktop, a jittery one-to-one follow, a reaction that breaks the composition or covers copy, or a captured wheel |
-| 7. Coherence with DESIGN.md | Colours resolve from theme tokens (a scheme swap recolours the scene); the motion personality matches the direction's words; materials and light match its world; nothing from its "Don't" list appears | A colour outside the theme, a motion personality from elsewhere, or a reference's look instead of its principle |
-| 8. Originality           | None of the forbidden clichés, and no brand in the category could ship it unchanged. It borrows principles from the references, never their look | A cliché, even recoloured or renamed; the category's default image; a reference reproduced |
-| 9. Performance           | On both tiers at 4× CPU: p95 well under 20 ms and no long animation frame over 100 ms during the scroll, stage loads included. A 4 is within the thresholds | Any threshold missed on either tier caps the score at 2, because a threshold is a gate. A known Lighthouse failure caps it at 2 too |
-| 10. Fallback quality     | Under reduced motion or without WebGL2 the page is complete: posters and still plates carry every beat, no canvas. The poster is the first frame (no pop at the crossfade) and crops like the canvas on every viewport. The phone's poster before the first interaction looks intended | A pop, a still that does not match its beat, a missing beat, a poster cropped unlike the canvas |
+| Criterion                   | A 5 looks like                                                                                                                                                                                                                                                                                                                                                                                                               | It scores 3 or less when                                                                                                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Message legibility       | The first viewport states the offer and the primary action at a glance, before any motion completes. The copy reads over the effect on every frame and tier, and the effect frames the message rather than competing with it                                                                                                                                                                                                 | The copy fights the effect, the veil fails on some frame, the headline waits for an animation, or a message lives only in the canvas                                                                                  |
+| 2. One signature idea       | One moment a visitor can retell in one sentence, and that sentence names the product's mechanism or promise (the storyboard's `Why`). The other scenes lead to it or echo it                                                                                                                                                                                                                                                 | Two effects compete, removing the moment would lose nothing, or the effect would fit another product unchanged                                                                                                        |
+| 3. Depth and light          | Planes that separate in motion; light with a source, a direction and falloff; glow only on hot cores; dark gradients without banding; grain where the direction wants a shot rather than a render                                                                                                                                                                                                                            | Flat single plane, light from nowhere, over-bright bloom turning the frame to haze, banding                                                                                                                           |
+| 4. Curves and arrivals      | Every element decelerates into its resting state (the strip's spacing shrinks); phases overlap so a scene reads as one gesture; eases and durations come from tokens; the scrub never steps; the poster-to-canvas crossfade is invisible                                                                                                                                                                                     | Linear starts or stops, pops, every element arriving at once with nothing leading, a jump or stutter in a strip, overshoot the direction did not ask for                                                              |
+| 5. Life at rest             | An ambient stage keeps breathing when the scroll stops, slowly enough to read the copy over it, with no visible loop seam, and pausing it holds the frame. A stage the storyboard declares not ambient (scrubbed footage, kinetic type: a deliberately static scene says so, ADR-0026) lives through the scroll instead: every resting frame is a composed still, and motion picks up without a jump when the scroll resumes | Frozen where the storyboard promises ambient life, restless enough to pull the eye from the copy, a visible seam, an ambient stage without its pause control, or a static scene resting on a half-finished transition |
+| 6. Pointer response         | The scene answers the mouse with weight (smoothed, slightly behind), in proportion, and the answer means something: the light follows, the matter parts. A touch does nothing because the finger scrolls, and the wheel is never captured. **N/A** when the storyboard gives the concept no pointer channel and `## Decisions` says why (a film-like shot, kinetic type)                                                     | No response on desktop where the storyboard promises one, a jittery one-to-one follow, a reaction that breaks the composition or covers copy, or a captured wheel                                                     |
+| 7. Coherence with DESIGN.md | Colours resolve from theme tokens (a scheme swap recolours the scene); the motion personality matches the direction's words; materials and light match its world; nothing from its "Don't" list appears                                                                                                                                                                                                                      | A colour outside the theme, a motion personality from elsewhere, or a reference's look instead of its principle                                                                                                       |
+| 8. Originality              | None of the forbidden clichés, and no brand in the category could ship it unchanged. It borrows principles from the references, never their look                                                                                                                                                                                                                                                                             | A cliché, even recoloured or renamed; the category's default image; a reference reproduced                                                                                                                            |
+| 9. Performance              | On both tiers at 4× CPU: p95 well under 20 ms, no long animation frame over 100 ms during the run (every stage load included), and `layoutShift` at 0.1 or less. A 4 is within the thresholds                                                                                                                                                                                                                                | Any threshold missed on either tier caps the score at 2, because a threshold is a gate. A known Lighthouse failure caps it at 2 too                                                                                   |
+| 10. Fallback quality        | Under reduced motion or without WebGL2 the page is complete: posters and still plates carry every beat, no canvas. The poster is the first frame (no pop at the crossfade) and crops like the canvas on every viewport. The phone's poster before the first interaction looks intended                                                                                                                                       | A pop, a still that does not match its beat, a missing beat, a poster cropped unlike the canvas                                                                                                                       |
 
 **Forbidden clichés.** When one of these is the signature, criterion 8 scores 1:
 
@@ -222,7 +289,7 @@ Ten criteria, each scored 1 to 5. The expected level is that of a hand-made stud
 
 A cliché is judged by what it shows, not by its name, and a new colour does not rescue it.
 
-**Pass:** every criterion scores 4 or more. Never average: one 3 is what a visitor remembers, whether the stutter or the cliché.
+**Pass:** every criterion scores 4 or more. The one exception is criterion 6 when it is N/A for the stated reason, which counts as a pass. Never average: one 3 is what a visitor remembers, whether the stutter or the cliché.
 
 ## 4. Scoring rules
 
@@ -248,7 +315,7 @@ Write `.context/motion-review/<page>/report.md` and give its summary to the call
 
 - Verdict: pass, or the criteria still under 4.
 - The last round's scores with their evidence.
-- Per tier: renderer, p95 frame time, longest animation frame, and whether a stage load caused it.
+- Per tier: renderer, p95 frame time, longest animation frame and whether a stage load caused it, and the layout shift with the element behind it.
 - One line per round: what failed and what was changed.
 - The files of the last round: clips, sheets, strips, traces, e2e frames, screenshots.
 - If it did not pass: the next fix you would make, and why the five rounds did not get there.
@@ -261,7 +328,7 @@ Write `.context/motion-review/<page>/report.md` and give its summary to the call
 - Page scripts on any URL other than the local server.
 - Comparing with images that are not on the project's board, versioning a capture, or adding images to a skill.
 - Averaging the grid; passing a criterion by removing what it judges; a sixth round.
-- Reading a scroll-time layout shift in the trace as a load problem.
+- Dismissing a layout shift during the scroll: Lenis scrolls with the same writes, so the visitor sees it.
 
 ## Reference skills
 
