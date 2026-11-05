@@ -10,6 +10,17 @@ import { pause, SETTLE_MS } from "./support/pause.ts";
 import { allowMotion, preferReducedMotion } from "./support/reduced-motion.ts";
 import { DESKTOP } from "./support/viewports.ts";
 
+/* The alpha a computed colour paints with: whatever its colour space, the 2D canvas resolves it. */
+function alphaOf(color: string): number {
+  const context = document.createElement("canvas").getContext("2d");
+  if (context === null) {
+    throw new Error("No 2D context to resolve the colour");
+  }
+  context.fillStyle = color;
+  context.fillRect(0, 0, 1, 1);
+  return Number(context.getImageData(0, 0, 1, 1).data[3]) / 255;
+}
+
 beforeEach(async () => {
   await page.viewport(DESKTOP.width, DESKTOP.height);
 });
@@ -71,5 +82,19 @@ describe("Stage playback", () => {
 
     expect(stageAt(screen.container).dataset["stage"]).toBe("poster");
     expect(screen.container.querySelector("button")).toBeNull();
+  });
+
+  it("stays opaque under the pointer, so its icon keeps its contrast whatever the canvas draws behind it", async () => {
+    const screen = await render(<BoxStage name="Hovered box" ambient />);
+    const pauseControl = screen.getByRole("button", { name: "Pause animation" });
+    await expect.element(pauseControl, LIVE_TIMEOUT).toBeVisible();
+    const resting = getComputedStyle(pauseControl.element()).backgroundColor;
+
+    await pauseControl.hover();
+    await pause(SETTLE_MS);
+
+    const hovered = getComputedStyle(pauseControl.element()).backgroundColor;
+    expect(hovered).not.toBe(resting);
+    expect(alphaOf(hovered)).toBe(1);
   });
 });

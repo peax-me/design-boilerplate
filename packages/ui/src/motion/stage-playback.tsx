@@ -16,7 +16,8 @@ interface StagePlaybackProps {
   playLabel: string;
 }
 
-/* WCAG 2.2.2: a scene that moves on its own can be paused. The control is named after the action it performs, so it carries no pressed state. */
+/* WCAG 2.2.2: a scene that moves on its own can be paused. The control is named after the action it performs, so it carries no pressed state.
+   It sits over the canvas, so its background stays opaque, hovered too: its icon contrasts with it whatever the scene draws behind (WCAG 1.4.11). */
 export function StagePlayback({
   children,
   controllable,
@@ -33,7 +34,7 @@ export function StagePlayback({
           variant="secondary"
           size="icon"
           aria-label={paused ? playLabel : pauseLabel}
-          className="absolute inset-e-3 bottom-3"
+          className="absolute inset-e-3 bottom-3 hover:bg-muted"
           onClick={() => {
             setPaused((wasPaused) => !wasPaused);
           }}

@@ -1,6 +1,6 @@
 import { createContext } from "react";
 
-export interface StagePlaybackValue {
+interface StagePlaybackValue {
   paused: boolean;
 }
 
