@@ -76,10 +76,9 @@ After every edit, the file is formatted and linted; errors block you until fixed
 
 ## Definition of done
 
-- `pnpm check` and `pnpm test:e2e` pass.
-- The motion audit of `pnpm test:e2e` passes: no blank or frozen canvas, no WebGL or shader error, no canvas under reduced motion.
+- `pnpm check` and `pnpm test:e2e` pass, the motion audit included: no blank or frozen canvas, no WebGL or shader error, no canvas under reduced motion.
 - `pnpm --filter @repo/web lighthouse` passes on mobile and desktop for every route.
-- Signature scenes pass `motion-review`: every criterion of its grid scores 4 or more.
+- Signature scenes pass `motion-review`: every criterion of its grid scores 4 or more, or is N/A where the grid allows it.
 - New routes are listed in `apps/web/e2e/support/routes.ts`.
 - New components have stories and appear in `packages/ui/AGENTS.md`.
 - New decisions have a proposed ADR.
