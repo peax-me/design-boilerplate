@@ -106,7 +106,7 @@ Only when the message fits two families equally, take the cheaper production: fe
 
 Write the section plan of `landing-page` §3, then the storyboard of `scroll-storytelling` §3 in its autonomous mode, under `### Storyboard`. It has two or three scenes, one of them the signature, each with a complete final state. When only one beat of the hierarchy has a sequence, a cause or a continuity to show, the page has that one scene, the signature, and the log says why: a thin second scene breaks `scroll-storytelling` §2.
 
-Each stage's block fills its `Stage` line: whether it is ambient, and what the pointer does or why it does nothing (a film-like shot, kinetic type). `motion-review` scores life at rest and the pointer against these declarations. Run the self-check of `landing-page` §4 before any code.
+Each block fills its `Pointer` line, saying what the pointer does or why it does nothing (a film-like shot, kinetic type), and a stage's block fills `Ambient` too. `motion-review` scores life at rest and the pointer against these declarations. Run the self-check of `landing-page` §4 before any code.
 
 ## 6. Visual plan and quote
 
@@ -136,7 +136,7 @@ Rules:
 - A fix that changes what moves or how it looks (a lighter scene for Lighthouse, a new poster, a re-timed scene) sends the loop back to step 1 for that scene. The five `motion-review` rounds count across the whole loop.
 - Never skip, disable or loosen a test, a check or a threshold to pass: fix the cause.
 - If the same failure survives three fixes, return to the plan once (concept, technique, asset weight), log why, and rebuild from that step.
-- If it still fails after that return, end the run with a failure report: the failing check, the fixes tried, the plan change, and what the page ships and lacks. This is the end of the run, not a third hard stop, because nothing waits for the user.
+- After that return, the failure gets three more fixes. If it survives them, end the run with a failure report: the failing check, the fixes tried, the plan change, and what the page ships and lacks. This is the end of the run, not a third hard stop, because nothing waits for the user.
 - If `motion-review` runs out of rounds without a pass, finish steps 2 to 5 and list the criteria still under 4 in the final report. This is not a stop.
 - The loop is done when steps 2 to 5 pass in one sweep after the last change, and `motion-review` has passed or used its five rounds.
 

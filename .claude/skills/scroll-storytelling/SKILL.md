@@ -36,8 +36,11 @@ Choreography:
   30–70%  …
   70–100% …
 Why: <what the motion explains>
-Stage (a scene with a WebGL stage): ambient | not ambient; pointer: <what it does> | none, because <reason>
+Pointer: <what it does> | none, because <reason>
+Ambient (a scene with a WebGL stage): yes | no
 ```
+
+Every scene fills `Pointer`, kinetic type and other stage-less scenes included: a signature with no pointer channel says so here, and `motion-review` scores its pointer criterion against it.
 
 **Interactive:** get the user's approval before coding.
 

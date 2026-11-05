@@ -9,13 +9,13 @@ A live shader earns its place when the page sells something felt rather than ins
 
 ## 1. When
 
-| The motion explains                                            | Technique                                        |
-| -------------------------------------------------------------- | ------------------------------------------------ |
-| Matter or energy in a surface: heat, fire, plasma, aurora      | Noise fields, domain warp, a token colour ramp   |
-| Something seen through a medium: heat haze, water, glass       | Refraction of a texture by a noise gradient      |
-| An object made of light or glass: orb, lens, crystal           | SDF raymarching, refraction, dispersion          |
-| A light source, a reveal                                       | Light rays (radial blur), restrained bloom       |
-| A data or AI atmosphere, an editorial or print look            | ASCII, Bayer dither, halftone, grain             |
+| The motion explains                                       | Technique                                      |
+| --------------------------------------------------------- | ---------------------------------------------- |
+| Matter or energy in a surface: heat, fire, plasma, aurora | Noise fields, domain warp, a token colour ramp |
+| Something seen through a medium: heat haze, water, glass  | Refraction of a texture by a noise gradient    |
+| An object made of light or glass: orb, lens, crystal      | SDF raymarching, refraction, dispersion        |
+| A light source, a reveal                                  | Light rays (radial blur), restrained bloom     |
+| A data or AI atmosphere, an editorial or print look       | ASCII, Bayer dither, halftone, grain           |
 
 Shapes that transform belong to `gpu-particles`, real places to `cinematic-footage`, objects to inspect to `scene-3d`. If a still or a short loop tells the same story, use it.
 
@@ -23,15 +23,15 @@ An orb, a lens or a crystal earns its row when it explains something, such as a 
 
 ## 2. Where the code lives
 
-| File                                          | Holds                                                                                        |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `packages/ui/src/motion/<effect>-stage.tsx`   | The effect component: composes `Stage`, sizes and frames the poster, layers copy over a veil |
-| `packages/ui/src/scene/<effect>-scene.tsx`    | The lazy scene: `StageCanvas`, the mesh, the GLSL as template strings, `useFirstFrame`       |
-| `packages/ui/src/scene/shader-chunks.ts`      | The GLSL every scene shares: hash, noise, FBM, curl, `coverUv`, the full-screen vertex       |
-| `packages/ui/src/scene/use-scene-resource.ts` | Creates a scene's resources in the effect that disposes them (§3), shared by every scene     |
-| `packages/ui/src/scene/use-smoothed-pointer.ts` | The mouse over the canvas, smoothed on the GSAP ticker, shared by every scene              |
-| `packages/ui/tests/<effect>-*.test.tsx`       | The shader, StrictMode and layering tests, written first (§8)                                |
-| `apps/web/src/features/<feature>/…`           | Composition only: `ScrollScene`, the poster import, the copy, the choreography               |
+| File                                            | Holds                                                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `packages/ui/src/motion/<effect>-stage.tsx`     | The effect component: composes `Stage`, sizes and frames the poster, layers copy over a veil |
+| `packages/ui/src/scene/<effect>-scene.tsx`      | The lazy scene: `StageCanvas`, the mesh, the GLSL as template strings, `useFirstFrame`       |
+| `packages/ui/src/scene/shader-chunks.ts`        | The GLSL every scene shares: hash, noise, FBM, curl, `coverUv`, the full-screen vertex       |
+| `packages/ui/src/scene/use-scene-resource.ts`   | Creates a scene's resources in the effect that disposes them (§3), shared by every scene     |
+| `packages/ui/src/scene/use-smoothed-pointer.ts` | The mouse over the canvas, smoothed on the GSAP ticker, shared by every scene                |
+| `packages/ui/tests/<effect>-*.test.tsx`         | The shader, StrictMode and layering tests, written first (§8)                                |
+| `apps/web/src/features/<feature>/…`             | Composition only: `ScrollScene`, the poster import, the copy, the choreography               |
 
 Rules, each for a reason:
 
@@ -328,14 +328,14 @@ The shader gets its test before its code (`references/effect-skeleton.md`, `test
 
 Budgets are global: Lighthouse ≥ 0.95 on mobile and desktop for every route, and on a real GPU with the CPU slowed 4×, a 95th-percentile frame ≤ 20 ms and no long animation frame over 100 ms during scroll. The `motion-review` skill owns the capture procedure. `pnpm test:e2e` fails on a blank canvas, a frozen ambient canvas, and any `THREE.WebGLProgram` or shader error in the console. A shader that fails to compile does not throw in the page: three logs the error and draws nothing, which is why the test of §8 throws instead.
 
-| Cost knob, per tier              | `light`                                     | `full`                       |
-| -------------------------------- | ------------------------------------------- | ---------------------------- |
-| Pixel ratio (`StageCanvas`)      | `[1, 1.5]`                                  | `[1, 2]`                     |
-| Raymarch steps (`MAX_STEPS`)     | 48                                          | 96                           |
-| Bloom                            | none, or no mipmap blur at half resolution  | mipmap blur                  |
-| Expensive passes                 | half-resolution target                      | full resolution              |
-| Full-screen shaders per viewport | one                                         | one                          |
-| Octaves, warp levels, dispersion and ray samples, palette | the same on both tiers: they shape the image | the same |
+| Cost knob, per tier                                       | `light`                                      | `full`          |
+| --------------------------------------------------------- | -------------------------------------------- | --------------- |
+| Pixel ratio (`StageCanvas`)                               | `[1, 1.5]`                                   | `[1, 2]`        |
+| Raymarch steps (`MAX_STEPS`)                              | 48                                           | 96              |
+| Bloom                                                     | none, or no mipmap blur at half resolution   | mipmap blur     |
+| Expensive passes                                          | half-resolution target                       | full resolution |
+| Full-screen shaders per viewport                          | one                                          | one             |
+| Octaves, warp levels, dispersion and ray samples, palette | the same on both tiers: they shape the image | the same        |
 
 Cost scales with pixels × work per pixel: at `full`, a 1440×900 stage is 5.2 million pixels per pass. When `light` is too slow, lower the cost knobs, then simplify the look for both tiers; never fork the look per tier. When the trace shows a long first frame, the culprit is usually shader compilation: precompile with `gl.compileAsync(scene, camera)` before the first render and cut loop sizes.
 

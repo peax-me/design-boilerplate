@@ -163,6 +163,9 @@ The pointer clip: centre the signature stage and wait until it is live (the snip
 
 ```js
 async () => {
+  if (!["localhost", "127.0.0.1"].includes(location.hostname)) {
+    throw new Error("Page scripts run against the project's local server only");
+  }
   const STAGE_INDEX = 0;
   const stage = document.querySelectorAll("[data-slot=stage]")[STAGE_INDEX];
   stage.scrollIntoView({ block: "center" });
@@ -172,7 +175,9 @@ async () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 }
-``` The sweep draws a figure eight over the window for 4 s, then holds still for 2 s, which gives the clip both the pointer response and the scene at rest. Scenes listen to `pointermove` on `window` for mouse pointers only, and the dispatched events bubble there:
+```
+
+The sweep draws a figure eight over the window for 4 s, then holds still for 2 s, which gives the clip both the pointer response and the scene at rest. Scenes listen to `pointermove` on `window` for mouse pointers only, and the dispatched events bubble there:
 
 ```js
 async () => {

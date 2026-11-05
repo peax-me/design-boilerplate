@@ -19,7 +19,7 @@ From `PRODUCT.md` and `.agents/product-marketing.md`, write: the feeling the vis
 4. **Playwright** on URLs the user or you pick: screenshots and scroll recordings to study motion, which galleries cannot show. Visit pages normally; never scrape galleries that block crawlers.
 5. **Magnific** `images_generate` for mood frames once a direction emerges, through the quote gate of `asset-production`. In an autonomous run the gate is the cap check, and mood frames are exploration: they go in the ledger of the page the run builds.
 
-In an autonomous run, use the sources already installed and note in `DESIGN.md` which ones were unavailable: never install a user-scope MCP or subscribe to a service for it. `impeccable` `shape` interviews the user and stops for a confirmation; there, answer its questions from the brief, `PRODUCT.md` and `.agents/product-marketing.md`, log each assumption under `## Decisions`, and go on.
+In an autonomous run, use the sources already installed and note in `DESIGN.md` which ones were unavailable: never install a user-scope MCP or subscribe to a service for it. `impeccable` `shape` only returns a brief and stops, so the directions come from `new-work`, through its `concept-seed` script. Do not serve the decision page or wait on it. Answer `new-work`'s questions from the brief, `PRODUCT.md` and `.agents/product-marketing.md`, log each assumption under `## Decisions`, pick with the four tests of §5, and go on.
 
 ## 3. Build the board
 

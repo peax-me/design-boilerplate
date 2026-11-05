@@ -52,7 +52,7 @@ Spacing comes only from `gap` (Stack, Inline, Grid) and padding (Section, Contai
 ## 7. Motion
 
 - Motion explains: it shows sequence, cause or continuity. If it explains nothing, it does not ship.
-- Budget per landing page: two or three scroll scenes, one signature moment, calm everywhere else. No fade-up on every section.
+- Budget per landing page: two or three scroll scenes, one of them the signature moment, or the signature alone when only one beat has a sequence, cause or continuity to show. Calm everywhere else. No fade-up on every section.
 - Author the final state in markup and animate from an offset, so reduced motion shows a complete page.
 - Animate `transform` and `opacity` only. Durations and easings come from `@repo/ui/motion/tokens`.
 
