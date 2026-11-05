@@ -12,18 +12,19 @@ const LazyScrollSceneTimeline = lazy(async () => {
   return { default: ScrollSceneTimeline };
 });
 
-/* With motion, the stage sticks to the top of the window: CSS holds it in place, so nothing shifts the layout. */
+/* With motion, the stage sticks to the top of the window: CSS holds it in place, so nothing shifts the layout.
+   The stage and its holds are measured in small-viewport units: a phone's toolbar that collapses or returns mid-scroll resizes neither the stage, its content nor the track, so the scrub, measured once, stays in step with the hold. */
 const stageVariants = cva("grid grid-cols-1 place-items-center overflow-clip", {
   variants: {
     minWidth: {
-      all: "motion-safe:sticky motion-safe:top-0 motion-safe:h-dvh motion-reduce:py-24",
-      md: "py-24 md:motion-safe:sticky md:motion-safe:top-0 md:motion-safe:h-dvh md:motion-safe:py-0",
+      all: "motion-safe:sticky motion-safe:top-0 motion-safe:h-svh motion-reduce:py-24",
+      md: "py-24 md:motion-safe:sticky md:motion-safe:top-0 md:motion-safe:h-svh md:motion-safe:py-0",
     },
   },
 });
 
 /* One window of scroll after the stage, during which the stage stays held and the story scrubs. */
-const holdVariants = cva("h-dvh", {
+const holdVariants = cva("h-svh", {
   variants: {
     minWidth: {
       all: "motion-reduce:hidden",

@@ -48,7 +48,7 @@ Rules, each for a reason:
 
 **Framing.** The poster and the canvas must crop alike, or the crossfade jumps. Two modes, both in the skeleton's `fit` variant:
 
-- `cover`: a full-bleed stage sized by its class (`h-dvh`). `Stage` sizes its poster layer with it, the poster image covers it (`object-fit: cover`), and the shader maps the canvas with `coverUv` and the poster's aspect, so both crop the same way on every screen.
+- `cover`: a full-bleed stage sized by its class (`h-svh`, like the `ScrollScene` stage that holds it; never `dvh`, which a phone toolbar changes mid-scroll and which would resize the canvas). `Stage` sizes its poster layer with it, the poster image covers it (`object-fit: cover`), and the shader maps the canvas with `coverUv` and the poster's aspect, so both crop the same way on every screen.
 - `poster`: an unsized stage takes its poster's height; canvas and poster share one box and aspect, and `coverUv` is the identity.
 
 The app passes `posterAspect` from the poster's static import (`poster.width / poster.height`).

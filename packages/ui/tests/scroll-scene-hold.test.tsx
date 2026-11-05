@@ -6,6 +6,7 @@ import { page } from "vitest/browser";
 
 import { ScrollScene } from "../src/motion/scroll-scene.tsx";
 import { sceneLength } from "../src/motion/tokens.ts";
+import { declaredValues } from "./support/declared-values.ts";
 import { DESKTOP } from "./support/viewports.ts";
 
 type Choreography = (timeline: gsap.core.Timeline) => void;
@@ -88,6 +89,24 @@ afterEach(() => {
 });
 
 describe("ScrollScene hold", () => {
+  it.each(["all", "md"] as const)(
+    "sizes its stage and its holds in small-viewport units from the %s breakpoint, so a collapsing toolbar keeps the scrub in step with the hold",
+    async (minWidth) => {
+      const screen = await render(
+        <ScrollScene choreography={vi.fn<Choreography>()} minWidth={minWidth} length="long">
+          <p>Measured content</p>
+        </ScrollScene>,
+      );
+      const stageAndHolds = [
+        ...screen.container.querySelectorAll("[data-slot='scroll-scene'] > div"),
+      ];
+
+      expect(stageAndHolds.map((part) => declaredValues(part, "height"))).toEqual(
+        Array.from({ length: 1 + sceneLength.long }, () => ["100svh"]),
+      );
+    },
+  );
+
   it("holds its stage on screen for its length without shifting the layout", async () => {
     const stopRecording = recordLayoutShifts();
     const screen = await render(

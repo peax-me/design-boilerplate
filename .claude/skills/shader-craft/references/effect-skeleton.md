@@ -34,7 +34,7 @@ const LazyEffectScene = lazy(async () => {
 const stageVariants = cva("col-start-1 row-start-1 w-full", {
   variants: {
     fit: {
-      cover: "h-dvh [&_img]:size-full [&_img]:object-cover",
+      cover: "h-svh [&_img]:size-full [&_img]:object-cover",
       poster: "[&_img]:h-auto [&_img]:w-full",
     },
   },
@@ -88,7 +88,7 @@ export function EffectStage({
 }
 ```
 
-- `fit="cover"`: the stage is sized by its class (`h-dvh`), the poster layer fills it, and the image covers it (`object-fit: cover`) exactly as `coverUv` crops the canvas. Pass a `next/image` with `fill`, or any image: the wrapper sizes it.
+- `fit="cover"`: the stage is sized by its class (`h-svh`, the height a `ScrollScene` holds: a phone toolbar that collapses mid-scroll never resizes it or its canvas), the poster layer fills it, and the image covers it (`object-fit: cover`) exactly as `coverUv` crops the canvas. Pass a `next/image` with `fill`, or any image: the wrapper sizes it.
 - `fit="poster"`: the stage takes the poster's own height; canvas and poster share one box, and `coverUv` is the identity.
 - **Layering.** `Stage` is positioned and its scene layer too, so anything after it in the grid paints under the canvas unless it is positioned: the veil and the copy are `relative`. The veil ignores the pointer (`pointer-events-none`), and the copy box hugs its content (`justify-self-start`), so neither covers the stage's pause control in the bottom-end corner. The veil sits on the side where the copy is; change the gradient direction in the component, never in the page, and keep the copy out of the bottom-end corner. Its opacity follows the contrast rule of `SKILL.md` §6.
 - `pauseLabel` and `playLabel` of `Stage` default to English: pass the page language's words through the effect component when the site is not in English.
