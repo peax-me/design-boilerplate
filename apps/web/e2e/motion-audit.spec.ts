@@ -16,12 +16,11 @@ import { stageName, waitForStagesInWindow } from "./support/stages.ts";
 /* With motion allowed, scenes are inserted within about 4 s of the load under software rendering (2.2 s measured): reduced motion is held for twice that after the last scroll. */
 const REDUCED_MOTION_HOLD_MS = 8000;
 
-function recordConsoleProblems(page: Page): string[] {
+/* Every level: three logs a lost context as a plain log. Only WebGL and shader messages fail the audit (findRenderErrors). */
+function recordConsoleMessages(page: Page): string[] {
   const messages: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error" || message.type() === "warning") {
-      messages.push(message.text());
-    }
+    messages.push(message.text());
   });
   page.on("pageerror", (error) => {
     messages.push(error.message);
@@ -89,7 +88,7 @@ for (const route of routes) {
     }, testInfo) => {
       /* Without a GPU every frame is drawn on the CPU, and the three projects run side by side. */
       test.slow();
-      const consoleProblems = recordConsoleProblems(page);
+      const consoleMessages = recordConsoleMessages(page);
       const frames: CanvasFrame[] = [];
       const ambientPairs: AmbientPair[] = [];
       try {
@@ -108,7 +107,7 @@ for (const route of routes) {
           ...onePerCanvas(findFrozenCanvases(ambientPairs)),
         ]).toEqual([]);
       } finally {
-        expect.soft(findRenderErrors(consoleProblems)).toEqual([]);
+        expect.soft(findRenderErrors(consoleMessages)).toEqual([]);
       }
     });
   });

@@ -54,6 +54,15 @@ describe("findRenderErrors", () => {
     ]);
   });
 
+  it.each([
+    "THREE.WebGLRenderer: Context Lost.",
+    "THREE.WebGLRenderer: Error creating WebGL context.",
+  ])("reports three's own context failure: %s", (message) => {
+    expect(findRenderErrors([message])).toEqual([
+      { rule: "render-error", canvas: "page", detail: message },
+    ]);
+  });
+
   it("reports nothing when the console is quiet", () => {
     expect(findRenderErrors([])).toEqual([]);
   });

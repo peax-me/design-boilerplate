@@ -19,7 +19,9 @@ export interface MotionViolation {
 const BLANK_DEVIATION = 2;
 const FROZEN_DIFFERENCE = 0.5;
 export const AMBIENT_INTERVAL_MS = 500;
-const RENDER_ERROR = /THREE\.WebGLProgram|Shader Error|GL_INVALID|CONTEXT_LOST_WEBGL/u;
+/* three logs a lost context at the log level and throws when it cannot create one: the audit reads every console level, and only these patterns fail it. */
+const RENDER_ERROR =
+  /THREE\.WebGLProgram|Shader Error|GL_INVALID|CONTEXT_LOST_WEBGL|WebGLRenderer: Context Lost|Error creating WebGL context/u;
 const PAGE_CANVAS = "page";
 
 function average(values: number[]): number {
