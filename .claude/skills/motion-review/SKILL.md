@@ -239,6 +239,9 @@ SwiftShader and headless timings mean nothing, so measure in the headed Chrome t
 
    ```js
    () => {
+     if (!["localhost", "127.0.0.1"].includes(location.hostname)) {
+       throw new Error("Page scripts run against the project's local server only");
+     }
      const context = new OffscreenCanvas(1, 1).getContext("webgl2");
      const extension = context?.getExtension("WEBGL_debug_renderer_info");
      const renderer = extension ? String(context.getParameter(extension.UNMASKED_RENDERER_WEBGL)) : "unknown";
