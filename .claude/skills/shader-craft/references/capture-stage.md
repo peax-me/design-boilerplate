@@ -22,7 +22,7 @@ until curl -sf http://localhost:3100/ > /dev/null; do
 done
 pnpm --filter @repo/web exec node scripts/capture-stage.ts --url http://localhost:3100/<route> --stage 0 \
   --width 1440 --height 900 --output ../../assets/source/<feature>/<slot>/poster.png
-# a still plate inside a pinned ScrollScene: scroll there, then let the scrub settle in fake time
+# a still plate inside a held ScrollScene: scroll there, then let the scrub settle in fake time
 pnpm --filter @repo/web exec node scripts/capture-stage.ts --url http://localhost:3100/<route> \
   --scroll 2400 --advance 1000 --output ../../assets/source/<feature>/<slot>/still-2.png
 kill "$server"

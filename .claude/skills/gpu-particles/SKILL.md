@@ -111,7 +111,7 @@ Budget: shape data stays inside the scroll-footage envelope, 6 MB on `full` and 
 | Damping     | `uDamping`                       | `velocity *= exp(−uDamping · uDelta)`: the same decay at any frame rate                    | 6           |
 
 - **Repel from the view ray**, not from a point: a point on the plane `z = 0` sits inside a volume, far from its surface particles, and nothing visible happens. The ray parts the cloud as the viewer sees it.
-- **Integration**: `uDelta` is the frame delta (seconds, within ]0, 0.1]). The start values are checked stable at the 0.1 s cap.
+- **Integration**: `uDelta` is the frame delta (seconds, within [0, 0.1]: 0 when a paused stage redraws its frame after a resize), so keep the `max(uDelta, 1e-4)` guards wherever it divides. The start values are checked stable at the 0.1 s cap.
 - **Tuning**: raise stiffness only with damping, keeping damping between 1.5 and 2 times √stiffness. Below, the shape wobbles; above, it crawls.
 - **Cost**: the velocity pass costs 18 noise evaluations per particle; measure on a real GPU before adding octaves or a second field.
 
@@ -139,11 +139,11 @@ Budget: shape data stays inside the scroll-footage envelope, 6 MB on `full` and 
 ## 6. Scroll and pointer
 
 - **Scroll**: the page owns a stable `{ value }` object and tweens it in its `ScrollScene` choreography; the scene copies it into `uProgress` every frame.
-- **Beats**: several shapes are beats of one pinned `ScrollScene`, with one canvas and one trigger.
+- **Beats**: several shapes are beats of one held `ScrollScene`, with one canvas and one trigger.
 - **Holds**: tween to each shape's exact progress (`k / (SHAPES − 1)`, `ease.inOut`), then hold there for at least a quarter of the beat so the shape can be read, while the copy of that beat crossfades in the same timeline. A hold is a tween to the value already reached:
 
 ```ts
-/* Three shapes: hold, morph, hold, morph, hold. Durations are timeline units; the scrub spreads them over the pin. */
+/* Three shapes: hold, morph, hold, morph, hold. Durations are timeline units; the scrub spreads them over the hold. */
 function morphThroughShapes(
   timeline: gsap.core.Timeline,
   progress: { value: number },
