@@ -45,7 +45,7 @@ Lighthouse on mobile and desktop for every route of `apps/web/e2e/support/routes
 MCP servers in `.mcp.json`, with telemetry off on every server that allows it:
 
 - `npx -y @playwright/mcp@0.0.84 --caps=devtools` replaces 0.0.83. The capability adds video and tracing tools. Playwright MCP has no telemetry option.
-- `npx -y chrome-devtools-mcp@1.12.0 --no-usage-statistics` is added for performance traces, CPU throttling, screencast, Lighthouse and reduced-motion emulation. Chrome DevTools MCP sends usage statistics to Google unless that flag is set.
+- `npx -y chrome-devtools-mcp@1.12.0 --no-usage-statistics --no-performance-crux` is added for performance traces, CPU throttling, screencast, Lighthouse and reduced-motion emulation. Chrome DevTools MCP sends usage statistics to Google unless the first flag is set, and the URLs of its performance traces to the CrUX API unless the second is.
 - `next-devtools-mcp@0.4.0` stays and gains the `env` entry `NEXT_TELEMETRY_DISABLED=1`.
 - The Blender MCP joins the list through ADR-0027, with its own telemetry setting.
 
