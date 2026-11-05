@@ -1,6 +1,6 @@
 ---
 name: cinematic-footage
-description: Generate AI footage with Magnific and drive it with the scroll inside the design system. Keyframes first, drafts finalized into the same shot, shots chained from the last frame of the finalized shot, seamless loops and seams checked with SSIM, under the 30,000-credit page cap; AVIF frame sequences encoded with ffmpeg and avifenc (all-intra H.264 beyond 150 frames), loaded coarse to fine in one queue per stage, drawn as textures in StageCanvas with threshold dissolves between shots, keyed as the page's transitions table says; 2.5D relief from a depth map; the poster taken from the first frame. Use when a page needs a real place, a product in the world, a journey through spaces, scroll-driven video, an image sequence, a video loop behind content, or a still that moves in depth.
+description: Generate AI footage with Magnific and drive it with the scroll inside the design system. Keyframes first, drafts finalized into the same shot, shots chained from the last frame of the finalized shot, seamless loops and seams checked with SSIM, under the 30,000-credit page cap; AVIF frame sequences encoded with ffmpeg and avifenc (all-intra H.264 beyond 150 frames), loaded coarse to fine in one queue per stage, drawn as textures in StageCanvas as one film paced by the scroll, chained seams blended over a few held frames keyed by light with a push and speed-driven motion blur, unchained seams dissolved as the page's transitions table says; 2.5D relief from a depth map; the poster taken from the first frame. Use when a page needs a real place, a product in the world, a journey through spaces, scroll-driven video, an image sequence, a video loop behind content, or a still that moves in depth.
 ---
 
 # Cinematic footage
@@ -12,7 +12,7 @@ Footage earns its place when the story needs a real place or a real object in th
 1. Shot list and beats with `scroll-storytelling`, every seam designed with `motion-design` §3; quote the whole plan (§2 Budget).
 2. Keyframes, then drafts, review, finalize, chain the next shot (§2).
 3. Encode, check budgets and seams, place the poster and the still plates (§3).
-4. Build the stage from `references/footage-scene.md` (§4, §5); tests and shader checks from `shader-craft` §8.
+4. Build the stage from `references/footage-scene.md`, and from `references/chained-seams.md` when the shots are chained (§4, §5); tests and shader checks from `shader-craft` §8.
 5. Measure on a real GPU at both tiers, then `pnpm test:e2e` and Lighthouse.
 
 ## 1. When
@@ -54,7 +54,9 @@ Surface: clean image, no film grain, no noise (grain is added in the shader).
 Constraints: no text, no lettering, no logos, no screens with readable content, no captions, no watermark.
 ```
 
-When the model supports `negativePrompt`, add `text, letters, logo, watermark, subtitles, cut, morphing, film grain`. Copy never lives in the video: it stays HTML, readable, translatable and accessible. Grain never lives in it either: grain baked into frames multiplies their weight (§3), while the grain recipe of `shader-craft` §4 costs nothing.
+A shot that crosses a seam is written as one physical move through what joins the two spaces: the camera flies into the dark opening and the opening becomes the next space around the lens, or it glides toward the bright gap and passes through into the open. Say that it is physically travelling. A prompt that describes two places invites the model to cut or morph between them.
+
+When the model supports `negativePrompt`, add `text, letters, logo, watermark, subtitles, cut, morphing, crossfade, dissolve, double exposure, film grain`. Copy never lives in the video: it stays HTML, readable, translatable and accessible. Grain never lives in it either: grain baked into frames multiplies their weight (§3), while the grain recipe of `shader-craft` §4 costs nothing.
 
 **Drafts, then the same shot in full quality.**
 
@@ -68,17 +70,18 @@ When the model supports `negativePrompt`, add `text, letters, logo, watermark, s
 2. `video_extract_frames { creationIdentifier, timestampsSeconds: ["last"], visible: false }` (free).
 3. The returned still becomes the next shot's `keyframes.start` (`{ type: "image", url: <still identifier> }`), with the next designed keyframe as `keyframes.end`.
 4. Download each extracted still into the masters: it is the seam both shots must meet (§3 measures it).
+5. Check the new take's head: `video_extract_frames` for its first two frames, then SSIM of the previous shot's last frame against each (§3). Some start-frame models (Kling 2.5, in one test) return the start keyframe verbatim as frame 1 and re-render from frame 2, which drifts in texture on a detailed surface: SSIM near 1 at frame 1, far lower at frame 2. Then frame 1 duplicates the previous shot's last frame: drop it at encoding (`skip=1`), and let the held-frame blend of §5 cover the small texture pop that remains, never a longer overlap.
 
 A draft's last frame is softer than the final's: chaining from a draft starts the next shot blurred.
 
-A match cut, a match on action or a camera move through a cut requires chained shots. Shots generated in parallel from shared keyframes meet on a different frame, speed and light, and only a plain cut or a dissolve that their row states can join them.
+A match cut, a match on action or a camera move through a cut requires chained shots. Shots generated in parallel from shared keyframes each start and end at rest, and meet on a different frame, speed and light: the model fills the gap with a morph or a crossfade, and only a plain cut or a dissolve that their row states can join them. Chained, the match cut sits inside the footage itself, and no shader has to invent the continuity.
 
 **Loops.** The same image as `keyframes.start` and `keyframes.end`, then measure the seam locally (§3): SSIM between the first and last frames ≥ 0.95. Below that, cut the clip at the frame closest to the first one, or generate again. Drop the last frame of a loop when it repeats the first, or the loop stutters on a doubled frame.
 
 **Review before spending more.** Free tools, on every draft and every final:
 
 - `video_view_frames { count: 16 }`: a contact sheet; check framing, light, the subject in the central band, the end frame.
-- `video_analyze`, one question at a time: "Does any legible or pseudo text, logo or interface appear? Give timestamps." "Is there any cut, or is the camera move continuous?" "Do surfaces melt, flicker or morph?" On two to ten creations together: "Do these shots share light, colour and scale?"
+- `video_analyze`, one question at a time, on all the takes of a journey together when the question is about the seams: "Does any legible or pseudo text, logo or interface appear? Give timestamps." "Is there any cut, or is the camera move continuous?" "Do surfaces melt, flicker or morph?" On two to ten creations together: "Do these shots share light, colour and scale?"
 - Two misses on one shot: rewrite the shot or its keyframes instead of generating again.
 
 **Budget.** 30,000 credits per page, exploration, drafts and retries included; Magnific is the only paid provider.
@@ -109,7 +112,7 @@ master=assets/source/<feature>/$shot/$shot.mp4
 frames=$(mktemp -d)                                   # PNG intermediates are never versioned
 out=apps/web/public/media/<feature>/$shot
 count=50                                              # this shot's share of the stage's 150 frames
-skip=0                                                # frames dropped at the head when a seam needs it (below)
+skip=0                                                # frames dropped at the head: 1 when the take's frame 1 is its start keyframe (§2), more when a seam needs it (below)
 duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$master")
 rate=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 "$master")
 # count frames from the first to the last source frame, both included: the seams and the poster need the true ends
@@ -195,8 +198,13 @@ Measured on test clips: a chained seam of 0.929 between two 1080p shots rose to 
 Start from `references/footage-scene.md`: the frame store, the dissolve shader, the scene and the clip, verified against this repo's typecheck, lint and format and run in a browser. The contract of `shader-craft` §2 applies: an effect component composes `Stage` (usually `fit="cover"` for a full-bleed hero), the lazy scene renders a full-screen plane in `<StageCanvas flat>`, the page tweens a `{ value }` progress object in its `ScrollScene`, and the scene copies it every frame.
 
 - **Frames are textures.** Decode with `imageOrientation: "flipY"` and set `flipY: false` on the texture (three's flip does nothing on an `ImageBitmap`), `colorSpace: SRGBColorSpace`, `LinearFilter`, no mipmaps; upload only when the frame index changes.
-- **The scroll places the playhead**: each shot owns an equal part of the progress, and the end of each part but the last dissolves into the next shot.
-- **Dissolves are noise thresholds**, not crossfades (`DISSOLVE_FRAGMENT` in the reference): an FBM field over the frame, a threshold that sweeps from below 0 to 1 with the dissolve, a soft edge where the next shot burns through, the two shots refracted along the field's slope at that edge, and the seam lit slightly brighter. Tint the seam with a token colour when the brand has one that suits light. The frame is mapped with `coverUv`, so the canvas crops exactly like the poster. The field follows the seam's row in `### Transitions`: the FBM field alone, with no direction, is the generic noise dissolve that `motion-design` §3 forbids. Bias it along the travel, weight it by the outgoing frame's luminance or a depth map, or shape it after the medium the camera passes through, and place the dissolve in the moving part of the shot, never over a hold.
+- **Chained shots play as one film**: concatenated end to end, with no frame played twice and no stretch where two shots play at once, under one playhead. The page's choreography paces it with a monotone curve through (scroll, film) points, flat where copy is read and steep where the camera travels, so every seam falls in a steep part and copy only in flat ones. An equal share of the scroll per shot puts chained seams at the shots' designed rest frames, inside a reading hold, where the seam is seen.
+- **A chained seam blends a few held frames**: 2 to 4 on each side, the outgoing shot holding its last frame while it keeps pushing in, the incoming one holding its first, and a luminance key from the seam's row deciding where the incoming shows first (dark first into a dark opening, light first out into brightness). A longer overlap where both shots play superimposes two camera positions and doubles every structure with parallax.
+- **Motion blur follows the film's speed**: a radial smear toward the shot's heading, driven by how fast the film runs, smoothed over about a tenth of a second, with the heading gliding rather than jumping. A smear tied to the seam window shows when a visitor crosses the seam slowly and reads as a glitch.
+- **One grade, one grain**: every stage of the page ends with the same grade chunk (`shader-craft` §4).
+
+`pace`, `placeFilm`, the seam and smear shaders and their checks: `references/chained-seams.md`. The rest of the stage (store, loading, clip, tests) stays as `references/footage-scene.md` builds it.
+- **Unchained seams dissolve along a threshold**, never a crossfade (`DISSOLVE_FRAGMENT` in `footage-scene.md`): an FBM field over the frame, a threshold that sweeps from below 0 to 1 with the dissolve, a soft edge where the next shot burns through, the two shots refracted along the field's slope at that edge, and the seam lit slightly brighter. Tint the seam with a token colour when the brand has one that suits light. The frame is mapped with `coverUv`, so the canvas crops exactly like the poster. The field follows the seam's row in `### Transitions`: the FBM field alone, with no direction, is the generic noise dissolve that `motion-design` §3 forbids. Bias it along the travel, weight it by the outgoing frame's luminance or a depth map, or shape it after the medium the camera passes through, and place the dissolve in the moving part of the shot, never over a hold.
 - **Beyond 150 frames**, the all-intra clip plays through a `VideoTexture` on a muted, inline, `preload="auto"` video: the scroll seeks it. `openClip` and `closeClip` go through `useSceneResource`; a child component suspends on `use(clip.ready)` until `loadeddata` (first frame decoded, duration known); seeks are coalesced (one at a time, always to the latest target); the texture updates on `seeked`; the video and texture are released on unmount. iOS Safari may load nothing until a video plays, so `openClip` starts it muted and puts it back, paused, on its first frame as soon as it plays; if `play()` is refused and no data comes, `ready` never resolves and the poster stays. Check it on a real device.
 - **Ambient or not**: a scroll-driven stage rests when the visitor rests, so it is not `ambient`. A WebGL loop moves on its own: mark it `ambient` and `Stage` gives it its pause control once live; the motion audit then also fails it if it freezes.
 - **Late mounts**: a phone loads the scene after its first interaction, often a scroll, so it may mount mid-journey and crossfade from the poster to the current frame, by design. `place` holds the first frame through its dead zone, the first tenth of the scroll, so the common case stays on the poster's frame.
@@ -204,6 +212,7 @@ Start from `references/footage-scene.md`: the frame store, the dissolve shader, 
 **Tests first**, in the package's Vitest browser mode, before the scene:
 
 - `place`: the dead zone holds the first frame, the end of each shot but the last dissolves, progress 1 is the last frame of the last shot.
+- Chained film: `pace` passes through its points and never decreases; `placeFilm` holds the outgoing last frame and the incoming first frame inside each seam window, its mix runs from 0 to 1 across it, and outside every window it shows one frame (`references/chained-seams.md`).
 - The store: at most six requests in flight, coarse frames first, decoded bitmaps capped (count `createImageBitmap` and `close` calls); a 404 asked once, a broken frame decoded once, the nearest good frame on screen (read from the picture); with network errors on several frames, the rest of the stage still loads.
 - The mounted scene, inside `<StrictMode>` and with network latency: frames keep loading to the last shot. With decoding slowed, a jump into a dissolve shows no black pixel and none of the next shot until its first frame is on the texture.
 - The clip, inside `<StrictMode>`: its first frame draws and a seek changes the picture (`references/footage-scene.md` has these tests).
@@ -241,6 +250,8 @@ vec2 parallax(sampler2D depthMap, vec2 uv, vec2 direction) {
 
 Every Magnific step here is paid: quote it like any other call (§2).
 
+A liquid that should run over the still (water, oil, a glaze, a drip) is a shader over the photo, traced from its own relief: `shader-craft` `references/liquid-on-photo.md`.
+
 ## 7. Accessibility
 
 - The poster carries the accessible name: its `alt` says in one sentence what the footage shows. The canvas is `aria-hidden` (the stage does it), and nothing essential lives in the footage.
@@ -259,6 +270,8 @@ Every Magnific step here is paid: quote it like any other call (§2).
 - Grain baked into the frames.
 - Hard cuts inside a scroll shot, actions that read wrong in reverse, a camera that changes speed for no reason.
 - A seam without its row in `### Transitions`, a match cut between shots that were not chained, or an undirected noise dissolve.
+- A chained take whose first frame repeats the previous shot's last; an overlap where two shots play at once; a seam at the end of an equal share of the scroll, inside a reading hold.
+- Motion blur tied to the seam window instead of the film's speed; a grade or a grain per scene.
 - More than 150 frames as AVIF, or a stage over 6 MB on desktop or 3 MB on phones, in any format.
 - Several shots in one folder; the poster stored twice.
 - Decoding every frame up front, one queue per shot, or decoding on the main thread with `<img>` uploads.

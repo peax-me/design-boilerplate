@@ -47,16 +47,18 @@ Heavy materials take the longer step of each duration and the gentler ease; ligh
 
 In a scrubbed timeline a duration token sets proportions: a `duration.slow` tween next to a `duration.base` one lasts 0.8 / 0.45 as long. The scene's `length` sets the absolute pace.
 
+A scrubbed span is easier to reason about in window heights than in timeline units: a span token (stagger, entry, exit, seam) of a fraction of a window, converted to the scene's timeline by its length (`scroll-storytelling` §4). Distances are tokens too: a short settle for copy, a longer gather or split for the medium.
+
 ## Eases by role
 
-| Role                      | Token                        | Use                                                                                                                                               |
-| ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Arrival into rest         | `ease.emphasized` (expo.out) | Most arrivals: far in the first frames, a long settle. The arrival strip shows the spacing shrink                                                 |
-| Settle, support, reaction | `ease.standard` (power2.out) | A softer settle for what follows the lead                                                                                                         |
-| Move between two rests    | `ease.inOut` (power3.inOut)  | Camera moves, morphs, a stage's `{ value }` progress between holds                                                                                |
-| Exit off screen           | none yet                     | Add an ease-in token through `design-system` once the page has exits; power2.in is a starting point                                               |
-| Overshoot settle          | none yet                     | Add it only when the personality allows overshoot, and use it on played moves                                                                     |
-| Direct drive              | `"none"`                     | A value the scroll drives at a constant rate: a horizontal track, a frame index whose footage already carries the camera's ease. Never an arrival |
+| Role                      | Token                        | Use                                                                                                                                                                                  |
+| ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Arrival into rest         | `ease.emphasized` (expo.out) | Most arrivals: far in the first frames, a long settle. The arrival strip shows the spacing shrink                                                                                    |
+| Settle, support, reaction | `ease.standard` (power2.out) | A softer settle for what follows the lead                                                                                                                                            |
+| Move between two rests    | `ease.inOut` (power3.inOut)  | Camera moves, morphs, a stage's `{ value }` progress between holds                                                                                                                   |
+| Exit off screen           | none yet                     | Add an ease-in token through `design-system` once the page has exits; power2.in is a starting point                                                                                  |
+| Overshoot settle          | none yet                     | Add it only when the personality allows overshoot, and use it on played moves                                                                                                        |
+| Direct drive              | `"none"`                     | A value the scroll drives at a constant rate: a horizontal track, a wipe front, a shader's progress, a frame index whose footage already carries the camera's ease. Never an arrival |
 
 ## Adding a token
 

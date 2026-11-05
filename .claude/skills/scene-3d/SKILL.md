@@ -86,6 +86,8 @@ The scroll reaches the scene through the page's `{ value }` progress object, wit
 - The scene moves the model, the camera and the material uniforms from the progress; a splat's camera moves along the captured orbit (§5).
 - Clips from the model (`useAnimations`) are scrubbed by setting the action time from the progress, not played freely. A clip that plays freely makes the stage `ambient`.
 - Durations and easings come from `@repo/ui/motion/tokens`.
+- One smoothing layer between the scroll and the model or camera (`scroll-storytelling` §4): under a held `ScrollScene`, the scrub; never a damping or a `quickTo` on top, which leaves the object behind its copy.
+- An object that carries the whole page (a product seen in several states, a space crossed from section to section) can be one world: one stage fixed behind normally scrolling copy, each block a pose of the camera or the object (`motion-design` §4).
 
 ## 7. Poster, budget and accessibility
 

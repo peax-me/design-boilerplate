@@ -9,7 +9,7 @@ Long animations that feel effortless come from a storyboard, not from effects. E
 
 ## 1. Budget
 
-Per page: two or three scenes, one of them the signature moment. When only one beat of the copy has a sequence, a cause or a continuity to show (§2), the page has that one scene, the signature, rather than a thin second one. Everything else stays still or uses short CSS transitions. A scene lasts one to three screens of scroll (`length="short" | "medium" | "long"`); longer pins feel like a trap.
+Per page: two or three scenes, one of them the signature moment. When only one beat of the copy has a sequence, a cause or a continuity to show (§2), the page has that one scene, the signature, rather than a thin second one. Everything else stays still or uses short CSS transitions. A scene lasts one to three screens of scroll (`length="short" | "medium" | "long"`); longer pins feel like a trap. A page built as one world (`motion-design` §4, build in §4 below) counts as one scene, however many sections it spans, because nothing is held: the copy scrolls normally over it.
 
 ## 2. Map beats to scenes
 
@@ -78,11 +78,38 @@ Rules:
 - Write the final state in markup and animate **from** an offset (`timeline.from`). Reduced motion skips the choreography, so the markup must already be the complete page. When the story has stages a final state cannot show, pass them to `ScrollScene still={…}` as still plates.
 - Target elements with `data-scene-item` attributes; selectors are scoped to the scene.
 - Animate `transform` and `opacity` only; the one exception is the short-text blur of §5. Durations, easings and staggers come from `@repo/ui/motion/tokens`; add a token there rather than a magic number.
-- One `ScrollTrigger` per scene (the one `ScrollScene` creates). Nested timelines, not nested triggers.
+- **Durations in a scrubbed timeline are shares of the scene**, not seconds: a `duration.slow` tween in a `medium` scene spans 0.8 of its timeline, and letters crawl over more than a screen. Write scrubbed spans in window heights (a scroll span token, `motion-design` §1) and convert them, `inScene(span, length) = span / sceneLength[length]`. A primitive that runs in both played and scrubbed timelines (a letter reveal, a counter) takes its timing as an argument.
+- One `ScrollTrigger` per role: the scene's hold (the one `ScrollScene` creates), and at most one entry scrub on the same stage (`references/section-handoffs.md`). Nested timelines, not nested triggers.
 - `ScrollScene` holds its stage with CSS (`sticky` in a track one window taller per screen of `length`) and scrubs the track, so a scene shifts no layout. Never add `pin` to a trigger: a pin switches the element to `position: fixed` and inserts a spacer, which field CLS counts as layout shift even when nothing visibly jumps.
 - A scene that hosts a WebGL stage tweens the page's `{ value }` progress object and never the stage's internals (`shader-craft` §3).
 - A transition across a boundary is built inside the outgoing scene's track, while its stage is still held: its last phases resolve the stage toward the next section's surface, carry an element into it, or wipe the next surface over it, so the frame that the sticky track releases already matches what follows (`motion-design` §3, "Stage to flat"). An element shared across the boundary travels in the timeline of the scene that spans it, or moves between two layouts with Flip (`gsap-plugins`).
-- A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill.
+- A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill. Apps cannot import `@gsap/react`, so kinetic type a page needs is such a primitive too.
+- A choreography that writes the page's progress object uses `gsap.set(progress, { value })` or a tween, never `progress.value = …`: the lint's `no-param-reassign` rejects writes to a prop.
+
+### One smoothing layer
+
+`motion-design` §2 sets the rule: between the scroll position and a world value, exactly one smoothing layer, or none. Smooth scrolling (Lenis, run by `MotionProvider`) moves the copy and the world together, so it opens no gap between them; every layer after it does. Lags add up: a scrub, a `quickTo` and a spring stacked behind Lenis left a world a large part of a screen behind its copy at a normal scroll speed, so the copy arrived over a state that had not formed yet.
+
+| Setup                                               | The one layer                    | Never add                                                       |
+| --------------------------------------------------- | -------------------------------- | --------------------------------------------------------------- |
+| A held `ScrollScene` driving DOM or shader uniforms | the `scrub` token                | `quickTo`, damping or a spring on the progress or a uniform     |
+| A stage whose matter settles by itself (a spring)   | the world's own spring           | a scrub: drive the value directly (`scrub: true` or `gsap.set`) |
+| One world behind normally scrolling copy            | the world's own physics, or none | `scrub`, `quickTo`                                              |
+
+A `ScrollScene` with a direct scrub is a prop added through `design-system` when a scene needs it. Check the lag on a real wheel scroll with the probe of `motion-review` §2.3.
+
+### One world
+
+When the story is one continuous subject (`motion-design` §4), mount its stage once, fixed behind the page, and let the copy scroll in normal flow over it. Each copy block names the state it shows (`data-world-state`); one trigger for the whole page measures the blocks and maps the scroll to the world with a pure function, holding each state while its block is read and morphing between blocks. A block whose copy names an action travels through it while it is read. Markup, mapping, tests and the reduced-motion plates: `references/one-world.md`.
+
+### Section handoffs
+
+- **Ground bands, not shader seams.** Each full-bleed stage carries bands of its section's ground at its top and bottom edges, in the DOM, shown and hidden by the scene's choreography. A seam drawn in the shader is missing whenever the next stage still shows its poster as it scrolls in.
+- **A scheme change** (dark to light) is a sweep inside the outgoing scene's hold that leaves the whole frame on the next ground, never a static gradient band between two sections.
+- **Calm sections** compose with one scrubbed timeline as they enter, and a held scene may compose while it rises with one entry scrub.
+- **An element carried across** copies its original's profile and never crosses copy.
+
+Recipes, parameters and the reasons behind them: `references/section-handoffs.md`.
 
 ## 5. Kinetic type
 
@@ -128,8 +155,9 @@ A treatment that needs layout to hold its box (the stacked cell of a word cycle,
 
 1. Scroll the page in the browser at 60 fps on a mid-range laptop; no layout shift, no jank (`gsap-performance` skill).
 2. Emulate reduced motion: the page reads completely, kinetic type included, with its final text.
-3. Resize a split headline across a breakpoint and reload with a slow font: the lines stay right and the animation keeps its progress.
-4. `review-animations` skill on each scene, then `pnpm test:e2e`.
+3. Every boundary on its strips (`motion-review` §2.3): no straight edge between grounds, no world lagging its copy, no action played between two blocks of copy.
+4. Resize a split headline across a breakpoint and reload with a slow font: the lines stay right and the animation keeps its progress.
+5. `review-animations` skill on each scene, then `pnpm test:e2e`.
 
 ## Reference skills
 

@@ -253,7 +253,8 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/* After the dead zone, each shot owns an equal part of the progress; the end of each part but the last dissolves into the next shot.
+/* Shots joined by a dissolve (generated apart). Chained shots play as one paced film instead: chained-seams.md replaces place and DISSOLVE_FRAGMENT.
+   After the dead zone, each shot owns an equal part of the progress; the end of each part but the last dissolves into the next shot.
    frame is a store index: starts[shot] plus the frame inside the shot. */
 export function place(progress: number, store: FrameStore): Placement {
   const shots = store.starts.length;

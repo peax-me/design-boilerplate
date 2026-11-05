@@ -1,6 +1,6 @@
 ---
 name: motion-design
-description: Direct how a page moves as one piece, before its storyboard. Write the motion language in DESIGN.md (an archetype, one easing family on the motion tokens, durations per kind of move, the direction of travel, entries, exits and stagger), design every boundary between sections and between shots in a `### Transitions` table (match cut, match on action, camera move through a cut, shared element, mask along the travel, luminance or depth reveal, smear, light leak, morph, overlapping ranges), pace the page in four acts with one lead per moment and rests between peaks, set the camera language for 3D and footage, hold shaders, particles, footage and DOM to one light, grade and personality, and hand `motion-review` a polish checklist verified frame by frame. Use before storyboarding scroll scenes, when a page's animations or transitions feel disconnected, generic or unpolished, when designing transitions between sections, scenes or shots, or when asked for motion direction, choreography, pacing or camera moves.
+description: Direct how a page moves as one piece, before its storyboard. Write the motion language in DESIGN.md (an archetype, one easing family on the motion tokens, durations per kind of move, the direction of travel, entries, exits and stagger), design every boundary between sections and between shots in a `### Transitions` table (match cut, match on action, camera move through a cut, shared element, mask along the travel, luminance or depth reveal, smear, light leak, morph, overlapping ranges), choose one world behind normally scrolling copy or held scenes, pace the page in four acts with one lead per moment and rests between peaks, keep one smoothing layer between scroll and world, set the camera language for 3D and footage, hold shaders, particles, footage and DOM to one light, grade and personality, and hand `motion-review` a polish checklist verified frame by frame. Use before storyboarding scroll scenes, when a page's animations or transitions feel disconnected, generic or unpolished, when designing transitions between sections, scenes or shots, or when asked for motion direction, choreography, pacing or camera moves.
 ---
 
 # Motion design
@@ -38,6 +38,7 @@ One language per project: every scene, transition, camera move and pointer respo
 - Travel: <axis and sense>, because <what the story moves through>
 - Eases: signature `<token>`, settle `<token>`, exit `<token>`; `none` only for <values the scroll drives directly>
 - Durations: element `<token>`, block `<token>`, scene arrival `<token>`, transition <share of the outgoing track>
+- Spans and distances: scrubbed spans `<token>` in window heights; settle distance `<token>`, travel distance `<token>`
 - Entry: from <upstream side>, by <transform | mask>, opacity alongside; exit: <ratio> of the entry, continuing <downstream>
 - Stagger: `<token>` in <reading order>, each item overlapping the previous by <share>
 - Rest: at least <screens> where only ambient moves, after every peak
@@ -50,9 +51,9 @@ Fill it from the tables of `references/motion-language.md`: archetypes, material
 
 - **Start from one archetype**, then adjust. Each of the four (premium, professional, energetic, playful) sets ease, overshoot, duration, stagger and favoured transitions together. Pick by the direction's words; never assemble values one by one, because separately chosen values mix personalities and the mix reads as nobody's.
 - **One easing family.** A signature ease carries most tweens, a settle ease the supporting moves, an exit ease the exits. The ease is the most recognisable trait of a motion personality: two families on one page read as two authors.
-- **Tokens only.** Each ease, duration and stagger names a token. When the language needs a role the tokens lack (an exit ease, an overshoot settle, a `CustomEase` curve), add it through `design-system` and check the curve in the GSAP Ease Visualizer. A raw number is a value nobody reviewed, and the next scene will not reuse it.
+- **Tokens only.** Each ease, duration, stagger, scrubbed span and travel distance names a token. Magic offsets and spans chosen scene by scene are the main source of mismatched rhythm, as much as durations. When the language needs a role the tokens lack (an exit ease, an overshoot settle, a `CustomEase` curve), add it through `design-system` and check the curve in the GSAP Ease Visualizer. A raw number is a value nobody reviewed, and the next scene will not reuse it.
 - **Durations by kind of move**, not by element: element, block, scene arrival, transition, hold, rest. Distance scales duration inside the scale, so a move across the screen takes the longer step. The same kind of move at the same pace is what makes a page feel deliberate.
-- **Travel has a motive.** One axis and sense, taken from what the story moves through: a descent, light entering from one side, a process that runs left to right. Entrances come from upstream, exits leave downstream, and counter-motion exists only between depth planes. A constant direction joins separate scenes into one journey; a reversal reads as going back.
+- **Travel has a motive.** One axis and sense, taken from what the story moves through: a descent, light entering from one side, a process that runs left to right. Entrances come from upstream, exits leave downstream, and counter-motion exists only between depth planes. A constant direction joins separate scenes into one journey; a reversal reads as going back. Derive every driven move from it: light paths, wipes, flows, particle drift, a shader's light path or flow, the camera. Copy is the exception: it settles in place in reading order, entering from the medium's side by the settle distance (a short one, about 8 to 16 px), because a long copy travel competes with the medium. To check, list every animated element with its direction: one against the travel needs a physical reason (gravity, reading order) or goes.
 - **Exits are shorter and accelerate**: 60 to 70 % of the entry, ease-in, continuing the travel. The eye has already left an exiting element, and a slow exit holds attention on what no longer matters. A visitor can scroll back, so an exit must also read as an entry played in reverse.
 - **Entries move by transform or mask**, with opacity alongside, never opacity alone. Opacity has no direction, so it cannot show travel.
 - **One stagger interval** for lines and blocks across the page, in reading order, each item overlapping the previous. The characters of a short split may use the tight token. Rhythm is a repeated interval; several intervals read as noise.
@@ -74,6 +75,10 @@ The classic principles assume a played animation: a clock runs and the viewer wa
 | Exaggeration                  | Push beyond realism for clarity            | Only where the personality allows. An overshoot on a scrub comes back when the visitor scrolls up and reads as a wobble: keep overshoot to played moves                                              |
 | Continuity, object permanence | Objects persist off screen                 | An element leaves where it will return; nothing vanishes by opacity mid-frame unless the story destroys it; something of each scene survives into the next                                           |
 
+**One smoothing layer.** Between the scroll position and the world, exactly one layer smooths, or none: the `scrub` token, a `quickTo`, or the world's own spring or damping. Smooth scrolling moves copy and world together and opens no gap; every further layer adds its lag to the last, and stacked lags put the world visibly behind the copy it illustrates, so a block arrives over a state that has not formed. Which layer each setup keeps: `scroll-storytelling` §4.
+
+**Scroll clocks are linear.** A value whose clock is the scroll (a wipe front, a shader's progress, a frame index) takes `ease: "none"` under the scrub. An in-out ease there squeezes a full-screen crossing into the curve's steep middle, a few dozen pixels of scroll, and it reads as a flash.
+
 ## 3. Transition grammar
 
 A boundary is any place where the frame changes world: section to section, a stage to the flat section after it, shot to shot inside a stage, a change of scheme. Design each one before the storyboard and record it in the page's table:
@@ -88,6 +93,8 @@ A boundary is any place where the frame changes world: section to section, a sta
 
 - **One row per boundary**, in page order, shot seams and scheme changes included. A `cut` row writes `none: <reason>` as its carrier. An undesigned boundary falls back to whatever the code does: a straight edge or a crossfade.
 - **The carrier is visible on both sides**: on the last frame of the outgoing side and the first frame of the incoming one. It is an element, a colour field, the light or the camera's move. The carrier is what the eye follows across; without one, the boundary is a cut whatever its effect.
+- **A carrier keeps its profile.** Rebuilt in another technique on the far side (a DOM line continuing a rendered beam, a DOM shape continuing a particle form), it matches angle, core, halo, falloff and colour token, not only position: a thin line continuing a glowing beam reads as a second object.
+- **A carrier never crosses copy.** It lands at a corner of the text block or behind an opaque target, and on narrow screens, where stacked copy sits in its path, it keeps only its landing.
 - **Length** is in seconds for a played transition, or a share of the outgoing track plus its overlap with the incoming one for a scrubbed transition.
 
 ### Techniques
@@ -116,7 +123,17 @@ The boundary most often left undesigned: a held `ScrollScene` releases and a rec
 3. **Mask along the travel.** The next surface wipes over the stage in the travel direction.
 4. **Lead with the next copy.** The next section's first line arrives over the stage's last phase, on a ground that already matches it.
 
-A straight edge between a rendered world and a flat page says the world was a box. The mechanics belong to `scroll-storytelling` §4.
+A straight edge between a rendered world and a flat page says the world was a box. When the stage's matter runs to its edge on the same ground, bands of the ground over the stage's edges dissolve it; they live in the markup, never in the shader, because the next stage may still show its poster as it arrives. The mechanics belong to `scroll-storytelling` §4.
+
+### Scheme changes
+
+A change of ground (dark to light, or the reverse) is a full-screen sweep inside the outgoing scene's hold that leaves the frame entirely on the next section's ground; the next section then rises on that ground, with no edge.
+
+- **Never a static gradient band between two sections.** A diagonal front across a box of width W needs a band taller than W, or one of its corners already shows the next ground against the section above: a hard edge. A held, full-viewport frame frees the geometry.
+- **At the end of the outgoing scene**, never at the start of the incoming one: there, the incoming scene scrolls in under its cover and the frame shows a screen of empty ground. Placed at the end, the incoming section's own content arrives right behind the front.
+- **The front's leading edge takes the medium's colour**, so it reads as the medium arriving (light, a liquid, a material), not as a gradient.
+
+Recipe: `scroll-storytelling` `references/section-handoffs.md`.
 
 Between two flat sections: a shared axis for siblings (the steps of one sequence move along one axis), fade through for unrelated content (out completely, then in, never superimposed), a container transform for one object that grows into a section.
 
@@ -138,9 +155,20 @@ Between two flat sections: a shared axis for siblings (the steps of one sequence
 - **Murch's rule of six, in priority order**: emotion, story, rhythm, eye-trace, the two-dimensional plane of the screen, the three-dimensional space of the action. When two clash, sacrifice from the bottom. A seam may break spatial continuity if it keeps the feeling, the beat and the pace, because viewers forgive a jump in space long before a break in feeling or story.
 - **Screen direction (the 180° rule).** A subject, the camera and the travel keep their screen direction across a boundary. Reverse it only when the story turns back, and say so in the row; otherwise a reversal reads as a return or a mistake.
 - **Eye-trace and eyeline.** The incoming focal point sits where the eye is at the end of the outgoing side, within about 15 % of the frame. When a subject looks or points, the next frame shows what is there. A cut that makes the eye jump across the frame reads as a jolt; one that meets it reads as continuity.
-- **Cut on movement.** A seam inside a movement is invisible; a seam at rest is seen. Place every transition in the moving part of its range, never inside a reading hold, because the eye tracks the motion and does not check what changed behind it.
+- **Cut on movement.** A seam inside a movement is invisible; a seam at rest is seen. Place every transition in the moving part of its range, never inside a reading hold, because the eye tracks the motion and does not check what changed behind it. Footage paces its film so seams fall where the camera travels fastest and slows where copy is read (`cinematic-footage` §5).
 
 ## 4. Choreography and pacing
+
+### One world or held scenes
+
+Choose before the storyboard, and log the choice.
+
+- **One world**: one stage mounted once, fixed behind the whole page, copy scrolling in normal flow over it, each block of copy a state of the world, held while it is read. Choose it when the story is one continuous subject (one material, one place, one cloud of points, one object) seen in several states. Every handoff becomes a morph of the same subject, so a cut is impossible; there are no held tracks, no layout shift from holding, and one canvas and one trigger for the page.
+- **Held scenes**: separate `ScrollScene`s, each with its own stage. Choose them when the scenes are different subjects or techniques. Two canvases cannot hand anything to each other, so every boundary between them needs its row and a carrier.
+- **Every section gets a state** in one world, reading sections included: a quiet state (laid down, dimmed, at an edge) keeps the world present without competing with the copy.
+- **Bookend**: the closing block can return to the first state, in the same place with the copy on the same side, so one motion closes the page with no new composition.
+
+The build: `scroll-storytelling` §4, "One world".
 
 ### One lead per moment
 
@@ -150,7 +178,8 @@ Between two flat sections: a shared axis for siblings (the steps of one sequence
 ### Beats, holds and rests
 
 - **Four acts per scene**: setup (10 to 20 % of the track), action (30 to 40 %), reaction (10 to 20 %: the secondary action, the world answering) and resolution with its hold (25 to 35 %). The structure is adapted from the LottieFiles motion-design skill (anticipation, action, reaction, resolution) and scaled from interface milliseconds to screens of scroll.
-- **Reading holds.** Copy never moves while it is read: it is fully in before the lead's action and holds still through the hold. Two blocks of copy are never readable at once; a swap is sequential, the old block fully out before the next is in. Moving or superimposed text cannot be read, and ghosted copy is the most visible sign of an unedited page.
+- **Reading holds.** Copy never moves while it is read: it is fully in before the lead's action and holds still through the hold.
+- **A named action plays while it is read.** A block whose copy names a state holds that state. A block whose copy names an action (the parts join, the colour fills in, the shape splits) plays that change while it is on screen, over a reading window about twice as long as a hold. With holds only, the action happens between two blocks, while no copy is on screen, and the reader arrives at the sentence once the action is over. Two blocks of copy are never readable at once; a swap is sequential, the old block fully out before the next is in. Moving or superimposed text cannot be read, and ghosted copy is the most visible sign of an unedited page.
 - **Rests.** After every peak comes a stretch of scroll where only ambient moves, at least the language's `Rest`. Without a rest, the next peak has nothing to rise from.
 
 ### Crescendo and release
@@ -191,7 +220,7 @@ When shaders, particles, footage, 3D and DOM share a page, four things hold them
 - **One grade and one grain.** One black level, contrast curve and shadow tint across stages, from shared post settings (`shader-craft` §5, §6), with footage keyframes graded to the same palette before generation. Grain comes from one recipe (`shader-craft` §4), at one size and amplitude on every stage, or on none. A lifted black or a finer grain beside a deep one shows the seam between techniques.
 - **One palette from tokens.** Every colour, light and seam tint resolves from `theme.css` at runtime, so a scheme swap recolours everything at once and nothing drifts.
 - **One personality.** Shader uniforms, particle springs, camera paths and DOM tweens take the same eases and the same travel; a particle spring settles in about the language's block arrival. Visitors feel the motion before they notice the technique.
-- **Scheme changes are transitions.** A page that crosses from dark to light does it once or twice at most, at a motivated moment (night to day, inside to outside), with its row in `### Transitions`. An unmotivated flip breaks the world more than any cut.
+- **Scheme changes are transitions.** A page that crosses from dark to light does it once or twice at most, at a motivated moment (night to day, inside to outside), with its row in `### Transitions` and the sweep of §3. An unmotivated flip breaks the world more than any cut.
 
 ## 7. Polish checklist
 

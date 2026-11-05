@@ -132,7 +132,7 @@ Budget: shape data stays inside the scroll-footage envelope, 6 MB on `full` and 
 - **Depth**: fade colour toward the background token with view depth (`smoothstep(near, far, -viewPosition.z)`), so the far side of a volume recedes instead of piling up into a flat blob.
 - **Speed**: mix the calm and hot tokens by speed, and grow travelling points slightly (up to 1.4 times): matter in transit is visible, matter at rest is quiet.
 - **Sparkle**: a small subset (about 1 in 64, chosen by seed) drawn a little brighter and larger gives the eye anchors; more than that becomes noise.
-- **Copy and particles**: keep the shape out of the copy column (camera offset or the stage's grid), and when copy must overlap, the veil and contrast rule of `shader-craft` §6 apply, checked on both schemes.
+- **Copy and particles**: keep the shape out of the copy column (camera offset or the stage's grid), and when copy must overlap, the veil and contrast rule of `shader-craft` §6 apply, checked on both schemes. Behind copy, transit glow stays at about half the opacity of resting signal lights: a dense additive morph crossing a headline flares into a blob (`references/world-states.md`).
 
 **Camera across unlike shapes.** One frame does not mean one silhouette: a wide floor and a tall arm both have a half-extent of 1, but fill the screen differently. Either frame the camera for the widest shape and accept the margins, or move it per beat in the same choreography (a `{ value }` object the scene copies, like progress); the simulation copies the camera position into `uCamera` every frame, so the pointer ray follows. To match the poster on every aspect ratio, cover like `object-fit: cover`: when the canvas is wider than the poster, narrow the vertical field, `fov = 2 · atan(tan(fov₀ / 2) · posterAspect / aspect)`.
 
@@ -157,7 +157,9 @@ function morphThroughShapes(
 }
 ```
 
-- **Several pinned sections** instead of one: each section is its own stage and canvas, with its own shapes. Share shape files between stages rather than duplicating them, and keep one signature stage per page (`scroll-storytelling` budget).
+- **One world** when the particles are the page's subject (`motion-design` §4): one stage fixed behind the page, every section a state of the particles, copy scrolling over it (`scroll-storytelling` §4). Every handoff is then a morph of the same points. Separate held sections with their own canvases cannot hand points to each other, so each boundary between them becomes a cut; keep them for subjects that really differ, share shape files between their stages, and keep one signature stage per page (`scroll-storytelling` budget).
+- **More states than shapes.** Clouds, bands, a laid-down state and dim states derive in the velocity shader from the sampled shapes and the texel index, with no new file; states that must fill the screen are placed from the camera; points that ride a moving target use an exact follow, not the spring: `references/world-states.md`.
+- **One smoothing layer.** The spring already settles the particles. Drive its progress directly from the scroll, without a scrub or a `quickTo` on top (`scroll-storytelling` §4): stacked, they leave the shape behind its copy.
 - **Pointer, mouse**: a passive `window` `pointermove` listener projects the pointer onto the plane `z = 0` and smooths it with `gsap.quickTo` (`duration.slow`, `ease.standard`). The force eases to 0 when the pointer leaves the canvas, leaves the document (`pointerleave` on the root element) or the window loses focus (`blur`): none of these sends a `pointermove`.
 - **Pointer, touch**: repel only at the contact point, from `pointerdown` until `pointerup` or `pointercancel` (the browser cancels when the gesture becomes a scroll), or not at all. Never react to touch `pointermove` and never call `preventDefault`: on a phone, a finger means scroll.
 - **Ambient**: a particle stage whose shape breathes at rest moves without input, so it is `ambient` (`shader-craft` §2): `Stage` gives it its pause control once live, and pausing freezes the simulation with the canvas. A stage that moves only with scroll or pointer is not ambient.
@@ -220,21 +222,24 @@ The global budgets apply (`shader-craft` §9; `motion-review` owns the real-GPU 
 
 ## 12. When it looks wrong
 
-| Symptom                                         | Usual cause                                               | Fix                                                                 |
-| ----------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
-| The middle shape never forms                    | Stagger spread over the whole progress                    | Segment-local `MORPH_GOAL`; the morph test of §10                   |
-| The morph swarms across the volume              | Shapes sampled with different sort keys, or ties          | One `--sort` for the stage; `radius` when a shape is flat           |
-| One part of the shape is a faint haze           | A large mesh takes the points by area                     | `--weight` that mesh down; delete hidden faces                      |
-| The shape looks hollow or one-sided             | Points on interior faces, or a flat mark not extruded     | Clean the model; extrude 2D marks before sampling                   |
-| The swarm explodes on a slow frame              | Stiffness too high for its damping at the 0.1 s cap       | Damping between 1.5 and 2 × √stiffness                              |
-| The pointer does nothing on a volume            | Repelling from a point on `z = 0`, or a stale camera      | View-ray repulsion; camera copied every frame                       |
-| Points shimmer or snap on some phones           | Half-float targets far from the unit frame                | Keep shapes in the shared unit frame                                |
-| Black canvas, error in the console              | Float extension missing or `init()` failed                | Check the fallback; the error must throw so the poster stays        |
-| The phone frame differs from the poster         | `Math.random()`, bloom, or a `light` sample from another set | Index seeds; `light` = prefix of `full`; compare side by side (§9) |
-| The motion audit says frozen                    | Breathing too faint                                       | More curl at rest, or a slow camera drift                           |
-| Points vanish on a light scheme                 | Additive blending on a light ground                       | Normal blending with an ink token on light grounds                  |
-| A phone shows only the poster                   | The `light` tier waits for a first interaction            | By design: the poster is a complete page                            |
-| A dot at the origin, only in `pnpm dev`         | The simulation made during render, disposed by StrictMode | `useSceneResource`; the StrictMode test of §10                      |
+| Symptom                                       | Usual cause                                                  | Fix                                                                |
+| --------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| The middle shape never forms                  | Stagger spread over the whole progress                       | Segment-local `MORPH_GOAL`; the morph test of §10                  |
+| The morph swarms across the volume            | Shapes sampled with different sort keys, or ties             | One `--sort` for the stage; `radius` when a shape is flat          |
+| One part of the shape is a faint haze         | A large mesh takes the points by area                        | `--weight` that mesh down; delete hidden faces                     |
+| The shape looks hollow or one-sided           | Points on interior faces, or a flat mark not extruded        | Clean the model; extrude 2D marks before sampling                  |
+| The swarm explodes on a slow frame            | Stiffness too high for its damping at the 0.1 s cap          | Damping between 1.5 and 2 × √stiffness                             |
+| The pointer does nothing on a volume          | Repelling from a point on `z = 0`, or a stale camera         | View-ray repulsion; camera copied every frame                      |
+| Points shimmer or snap on some phones         | Half-float targets far from the unit frame                   | Keep shapes in the shared unit frame                               |
+| Black canvas, error in the console            | Float extension missing or `init()` failed                   | Check the fallback; the error must throw so the poster stays       |
+| The phone frame differs from the poster       | `Math.random()`, bloom, or a `light` sample from another set | Index seeds; `light` = prefix of `full`; compare side by side (§9) |
+| The motion audit says frozen                  | Breathing too faint                                          | More curl at rest, or a slow camera drift                          |
+| The shape forms after its copy has arrived    | Smoothing stacked: a scrub or `quickTo` on top of the spring | Drive progress directly; the spring is the one settle              |
+| A small glyph smears behind its moving target | The spring trails a moving goal                              | Exact exponential follow for riders (`references/world-states.md`) |
+| A state leaves the screen on phones           | Placed in world units                                        | Place it from the camera; sweep by height relative to it           |
+| Points vanish on a light scheme               | Additive blending on a light ground                          | Normal blending with an ink token on light grounds                 |
+| A phone shows only the poster                 | The `light` tier waits for a first interaction               | By design: the poster is a complete page                           |
+| A dot at the origin, only in `pnpm dev`       | The simulation made during render, disposed by StrictMode    | `useSceneResource`; the StrictMode test of §10                     |
 
 ## 13. Avoid
 

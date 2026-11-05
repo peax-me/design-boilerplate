@@ -29,6 +29,7 @@ This skill takes a brief to a verified page with no one in the loop, at the leve
 - Read `AGENTS.md` (golden rules, known conflicts) and `docs/design/principles.md`. Work on a branch, never on `main`.
 - Choose the route. While the project still carries the starter (below), it is `/`. Otherwise it is the one the brief names, or `/` when the brief names none. Log the choice. Below, `<page>` is the route's feature name.
 - Evidence that is not versioned goes in `.context/` (gitignored): `motion-review` writes to `.context/motion-review/<page>/`, and this skill to `.context/signature-experience/<page>/`.
+- **Known pitfall: the edit hook in a nested worktree.** A run in a git worktree nested inside the main checkout (`.claude/worktrees/…`) inherits the main checkout's Claude Code hooks: `check-edited-file` resolves the repository root from the main checkout and runs its `oxlint` on the worktree's file, which loads the lint plugins twice and fails before linting anything. That failure is not a verdict on the file. Run the checks from the worktree's own root instead (`pnpm format`, `pnpm lint`, `pnpm typecheck`, or `pnpm exec oxlint --type-aware --deny-warnings <file>`), log the workaround under `## Decisions`, and leave the hook unchanged. A Conductor workspace is its own root and is not affected.
 
 **The starter.** A project created from the boilerplate still carries its starter: a landing at `/` that pitches the boilerplate, the product context and direction that describe it, and the components and helpers only that landing uses. A run replaces all of it, because a client page never ships the boilerplate's pitch and `knip` fails on what is left unused:
 
@@ -108,6 +109,7 @@ Write the section plan of `landing-page` §3 first: the transitions need the ord
 
 - `## Motion language` in `DESIGN.md`, from the direction and the chosen concept (`motion-design` §1);
 - the page's `### Transitions` under `## Page: <name>`: one row per boundary between sections and per shot seam, none of them a forbidden default (`motion-design` §3);
+- one world behind normally scrolling copy, or held scenes, by whether the story is one continuous subject (`motion-design` §4);
 - the intensity of each scene, rising to the signature with a rest between peaks (`motion-design` §4).
 
 Run its self-check (`motion-design` §8) and log the archetype, the travel and the choice behind each row that is not a plain cut under `## Decisions`.

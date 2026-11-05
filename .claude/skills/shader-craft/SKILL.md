@@ -9,13 +9,14 @@ A live shader earns its place when the page sells something felt rather than ins
 
 ## 1. When
 
-| The motion explains                                       | Technique                                      |
-| --------------------------------------------------------- | ---------------------------------------------- |
-| Matter or energy in a surface: heat, fire, plasma, aurora | Noise fields, domain warp, a token colour ramp |
-| Something seen through a medium: heat haze, water, glass  | Refraction of a texture by a noise gradient    |
-| An object made of light or glass: orb, lens, crystal      | SDF raymarching, refraction, dispersion        |
-| A light source, a reveal                                  | Light rays (radial blur), restrained bloom     |
-| A data or AI atmosphere, an editorial or print look       | ASCII, Bayer dither, halftone, grain           |
+| The motion explains                                       | Technique                                                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Matter or energy in a surface: heat, fire, plasma, aurora | Noise fields, domain warp, a token colour ramp                                                    |
+| Something seen through a medium: heat haze, water, glass  | Refraction of a texture by a noise gradient                                                       |
+| A liquid flowing on a photographed surface                | Paths traced from the photo, a transparent film over a wet zone (`references/liquid-on-photo.md`) |
+| An object made of light or glass: orb, lens, crystal      | SDF raymarching, refraction, dispersion                                                           |
+| A light source, a reveal                                  | Light rays (radial blur), restrained bloom                                                        |
+| A data or AI atmosphere, an editorial or print look       | ASCII, Bayer dither, halftone, grain                                                              |
 
 Shapes that transform belong to `gpu-particles`, real places to `cinematic-footage`, objects to inspect to `scene-3d`. If a still or a short loop tells the same story, use it.
 
@@ -37,9 +38,10 @@ Rules, each for a reason:
 
 - Apps never touch a canvas, a class or a style: the effect is a `@repo/ui` component with a story, a `data-slot`, a row in `packages/ui/AGENTS.md` and a Code Connect template in `packages/ui/figma/`, built through `design-system` with its tests first.
 - The GLSL lives in the scene file, next to the uniforms it reads: one file to read when the look changes, and the shader ships in the lazy chunk, never in the page bundle. When the file nears the 250-line lint limit, its strings move to `<effect>-shaders.ts` beside it.
+- **Plan the split from the start** for any scene with CPU-side motion: the lint caps a file at 250 lines and 10 imports and a function at 3 parameters. `<effect>-shaders.ts` (GLSL and material), `<effect>.ts` (a non-React factory, `advance`, disposal), `<effect>-motion.ts` (per-frame CPU motion: paths, beads, a follow), `<effect>-scene.tsx` (hooks and JSX only). Factories take `(input, input, look)`, with every tunable in one look object.
 - Shared GLSL lives once, in `shader-chunks.ts`, created by the first effect of a project that needs it from `references/shader-chunks.md`; every scene interpolates from it (`${HASH}${GRADIENT_NOISE}${FBM}`). A second copy is a defect.
 - Effect components and scene primitives are covered by ADR-0024: no project ADR. A library is installed only when used, pinned in the catalog: add the version under `catalog:` in `pnpm-workspace.yaml`, then `pnpm add --filter @repo/ui <package>@catalog:`. Allowed majors: `@react-three/postprocessing` 3 with `postprocessing` 6, `@react-three/drei` 10 (helpers imported one by one).
-- Copy over an effect is passed as `children`: the effect component owns the layering (stage, veil, copy), so contrast is designed once, not per page. `Stage` and its scene layer are positioned, so the veil and the copy must be positioned too (`relative`) or the canvas paints over them; the veil ignores the pointer and the copy box hugs its content, so the stage's pause control in the bottom-end corner stays reachable. Keep the copy out of that corner.
+- Copy over an effect is passed as `children`: the effect component owns the layering (stage, ground bands, veil, copy), so contrast is designed once, not per page. Section seams are those ground bands in the markup, driven by the page's choreography, never drawn by the shader (`scroll-storytelling` §4): the next stage may still show its poster when it arrives. Keep the pause control above every overlay with an on-scale `z-*`, or a band dims it. `Stage` and its scene layer are positioned, so the veil and the copy must be positioned too (`relative`) or the canvas paints over them; the veil ignores the pointer and the copy box hugs its content, so the stage's pause control in the bottom-end corner stays reachable. Keep the copy out of that corner.
 - Start from `references/effect-skeleton.md`: the stage component, the scene, the shader test and the page wiring, verified against this repo's typecheck, lint and format and run in a browser.
 
 `Stage` already loads the scene after idle near the viewport (`full`) or after the first interaction (`light`), probes WebGL2 just before mount, and falls back to the poster under reduced motion, without WebGL2, on a lost context or a failing scene.
@@ -50,6 +52,10 @@ Rules, each for a reason:
 - `poster`: an unsized stage takes its poster's height; canvas and poster share one box and aspect, and `coverUv` is the identity.
 
 The app passes `posterAspect` from the poster's static import (`poster.width / poster.height`).
+
+**Known pitfall: AVIF sizes under Turbopack.** `next dev` with Turbopack has reported a static AVIF import as 100×100, which turns `posterAspect` into 1 and crops the canvas unlike the poster. Check `poster.width` once in the dev server and in the build you ship; while it is wrong, export the aspect of the capture as a named constant beside the poster (the capture viewport's width over its height, §7 step 4) and pass that.
+
+**Measuring.** `StageCanvas` measures its size only, never its position (`resize={{ scroll: false }}`). React Three Fiber's default re-measures on every scroll event behind a 50 ms debounce: during a continuous scroll the debounce never settles, a stage that mounts mid-scroll never gets a size, and it stays on its poster. Never pass a `resize` option back to a stage canvas.
 
 **Ambient.** A stage is `ambient` when it moves without input: idle drift, breathing, a loop. Once live, `Stage` gives an ambient stage its own pause and play control (WCAG 2.2.2), named by `pauseLabel` and `playLabel` (English by default: pass the page language's words). Pausing stops the canvas advancing: `uTime` stops, the frame holds, and a resize redraws it. A stage that moves only while the visitor scrolls or points is not ambient. Set `ambient` honestly: the motion audit also fails an ambient stage whose frames do not change.
 
@@ -67,7 +73,9 @@ The app passes `posterAspect` from the poster's static import (`poster.width / p
 
 ## 4. Recipes
 
-Write GLSL ES 3.00 (three compiles `ShaderMaterial` as `#version 300 es` and maps `gl_FragColor`). End every fragment shader with `#include <colorspace_fragment>`, so token colours match the page. Avoid built-in names (`step`, `distance`, `length`) as variable names.
+Write GLSL ES 3.00 (three compiles `ShaderMaterial` as `#version 300 es` and maps `gl_FragColor`). End every fragment shader with `#include <colorspace_fragment>`, so token colours match the page. Avoid built-in names (`step`, `distance`, `length`) and the words GLSL ES 3.00 reserves (`half`, `input`, `output`, `filter`, `sample`, `common`) as variable names: the compile fails.
+
+**Direction.** A shader's motion (a light's path, a flow, a drift) follows the travel of `## Motion language` (`motion-design` §1). Flipping it must leave the first frame unchanged; re-check the poster when it does not.
 
 **Foundations** come from `shader-chunks.ts` (`references/shader-chunks.md`): the PCG integer hash (a `sin`-based hash breaks into stripes on low-precision mobile GPUs), gradient noise (peaks near ±0.7: remap with `smoothstep`, never assume ±1), FBM with each octave turned so the lattice never lines up, curl noise, `coverUv` and interleaved gradient noise. The recipes below call them.
 
@@ -195,6 +203,18 @@ vec3 grain(vec3 color, vec2 pixel, float frame, float amount) {
 ```
 
 Grain amount 0.03 to 0.06, a new pattern every frame (`frame` counted in the scene, never derived from `uTime`, whose fractions repeat).
+
+**One grade, applied last by every scene.** When a page has several stages, one `FILM_GRADE` chunk in `shader-chunks.ts` holds the shadow tint, the contrast curve, the vignette and the grain, and every scene calls it last, before the colour-space include. Separate amounts per scene show side by side, a finer grain or a lifted black next to a deeper one (`motion-design` §6).
+
+```glsl
+vec3 filmGrade(vec3 color, vec2 uv, vec2 pixel, float frame) {
+  float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  color *= mix(uShadowTint, vec3(1.0), luma);                      // tint the shadows only, from a token
+  color = mix(color, color * color * (3.0 - 2.0 * color), uContrast); // a smoothstep S-curve, 0.1 to 0.2
+  color *= 1.0 - uVignette * dot(uv - 0.5, uv - 0.5) * 2.0;        // 0.3 to 0.4 at the corners
+  return grain(color, pixel, frame, uGrain);
+}
+```
 
 **Quiet zone**: calm the field behind the copy. The mask lives in canvas space (`gl_FragCoord`), because the copy moves with the canvas box, while the matter lives in poster space (`coverUv`).
 
@@ -361,7 +381,9 @@ Write recipes from first principles, as above, or port from permissive sources w
 - Over-bright bloom: a low threshold turns the whole frame to haze. Bloom the core, not the scene.
 - Texture memory: atlases and backdrops at most twice the rendered width, no mipmaps on full-screen textures.
 - First-frame pop: a poster that is not the first frame, `Math.random()` seeds, a scene that starts mid-animation, a poster cropped differently from the canvas.
-- Hard cuts in uniforms: every uniform change goes through the scrub, `quickTo` or a token easing.
+- Hard cuts in uniforms: every uniform change goes through the scrub, `quickTo` or a token easing, and only one of them (`scroll-storytelling` §4, "One smoothing layer").
+- A section seam drawn in the shader: it is missing while the stage shows its poster.
+- A liquid drawn as a glowing line or a tinted tube: trace it from the photo and keep it transparent (`references/liquid-on-photo.md`).
 
 ## Reference skills
 
