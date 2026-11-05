@@ -50,7 +50,7 @@ Eases, durations, staggers and directions come from `## Motion language`, and ea
 
 ## 4. Build
 
-Scenes use `ScrollScene` from `@repo/ui/motion/scroll-scene` inside a client component (`apps/web/src/features/<page>/<name>-scene.tsx`). `MotionProvider` (already in the app providers) runs Lenis smooth scrolling synced to GSAP.
+Scenes use `ScrollScene` from `@repo/ui/motion/scroll-scene` inside a client component (`apps/web/src/features/<page>/<name>-scene.tsx`). `MotionProvider` (already in the app providers) runs Lenis smooth scrolling synced to GSAP. Both load GSAP once the page is idle, so the first paint never waits for it: the choreography only drives the `timeline` it receives, and its module imports nothing from `gsap` (the `gsap.core.Timeline` type is global).
 
 ```tsx
 "use client";
@@ -83,7 +83,8 @@ Rules:
 - `ScrollScene` holds its stage with CSS (`sticky` in a track one window taller per screen of `length`) and scrubs the track, so a scene shifts no layout. Never add `pin` to a trigger: a pin switches the element to `position: fixed` and inserts a spacer, which field CLS counts as layout shift even when nothing visibly jumps.
 - A scene that hosts a WebGL stage tweens the page's `{ value }` progress object and never the stage's internals (`shader-craft` §3).
 - A transition across a boundary is built inside the outgoing scene's track, while its stage is still held: its last phases resolve the stage toward the next section's surface, carry an element into it, or wipe the next surface over it, so the frame that the sticky track releases already matches what follows (`motion-design` §3, "Stage to flat"). An element shared across the boundary travels in the timeline of the scene that spans it, or moves between two layouts with Flip (`gsap-plugins`).
-- A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill. Apps cannot import `@gsap/react`, so kinetic type a page needs is such a primitive too.
+- A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill. Apps cannot import `@gsap/react`, so kinetic type a page needs is such a primitive too. Its GSAP code sits in a module of its own, rendered lazily inside `AfterIdle` (`packages/ui/AGENTS.md`).
+- A page module that imports `gsap` or a plugin puts GSAP back before the first paint (about 50 KB gzipped) and costs Lighthouse mobile its LCP margin: rerun `pnpm --filter @repo/web lighthouse` after adding one.
 - A choreography that writes the page's progress object uses `gsap.set(progress, { value })` or a tween, never `progress.value = …`: the lint's `no-param-reassign` rejects writes to a prop.
 
 ### One smoothing layer

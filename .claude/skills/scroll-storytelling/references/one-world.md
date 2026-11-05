@@ -19,7 +19,7 @@ The world's progress runs from 0 to N − 1 over N states, and an integer is an 
 
 ## Mapping scroll to the world
 
-One `ScrollTrigger` for the whole page. It measures the beats on refresh, so the copy decides where the world holds, and a change of fonts, breakpoint or copy length never desynchronises them.
+One `ScrollTrigger` for the whole page. It measures the beats on refresh, so the copy decides where the world holds, and a change of fonts, breakpoint or copy length never desynchronises them. The module below imports GSAP: the primitive renders the component that calls `driveWorld` lazily, inside `AfterIdle`, so GSAP never loads before the first paint (`packages/ui/AGENTS.md`).
 
 ```ts
 import { gsap } from "gsap";
