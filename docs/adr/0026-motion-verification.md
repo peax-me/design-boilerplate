@@ -31,14 +31,21 @@ Chosen option: "A motion check in `packages/design-audit`, a local real-GPU perf
 
 Motion check, run by `pnpm test:e2e` on SwiftShader:
 
-- Scripted scroll over progress steps, one capture per step, assembled into a contact sheet.
+- Scripted scroll over progress steps, one capture per step, attached to the test report as separate frames; `motion-review` assembles them into a contact sheet.
 - Blank canvas: the standard deviation of luminance on a 32×32 grid is below 2.
 - Frozen canvas: the mean difference between two captures 500 ms apart is below 0.5, where motion is expected.
 - A WebGL or shader error in the console fails the run. Console errors and warnings unrelated to WebGL or shaders do not.
 - A pass with reduced motion enabled.
 - The WebGL renderer string is logged.
 
-Perf budgets on a real GPU, run locally: CPU throttled 4×, 95th percentile of frame times ≤ 20 ms, no long animation frame above 100 ms during scroll. These are starting values, adjusted after the trial runs.
+Perf budgets on a real GPU, run locally: CPU throttled 4×, 95th percentile of frame times ≤ 20 ms, and long animation frames within two budgets:
+
+- **Load: 300 ms.** Every frame from the page load until the stages of the first window are live, on both tiers: hydration and the first stage mount right after page load (on `light`, the mount that the first interaction triggers).
+- **Scroll: 100 ms.** Every frame after that, every stage load during scroll included.
+
+Long animation frames are observed from the page load (a buffered observer), so the first stage mount is always measured, whenever the measurement starts. These are starting values, adjusted after the trial runs.
+
+The first stage mount right after page load may reach a long animation frame of up to 300 ms, on both tiers; stage loads during scroll keep 100 ms or less; the 95th percentile of 20 ms and the layout shift of 0.1 or less (`motion-review`) are unchanged. Mandated by the project owner, 2026-11-05.
 
 Lighthouse on mobile and desktop for every route of `apps/web/e2e/support/routes.ts`: performance ≥ 0.95, accessibility, best practices and SEO = 1.
 
@@ -69,4 +76,6 @@ The `motion-review` skill and the extended `design-reviewer` agent judge recordi
 - Related: ADR-0012 (testing), ADR-0025 (stage host), ADR-0027 (Blender MCP), ADR-0028 (autonomous mode).
 - Partially supersedes ADR-0014: its list of pinned project MCP servers (`next-devtools-mcp` and `@playwright/mcp`). Playwright moves to 0.0.84 with `--caps=devtools`, `next-devtools-mcp` gains `NEXT_TELEMETRY_DISABLED=1`, and Chrome DevTools MCP (this ADR) and the Blender MCP (ADR-0027) join the list. The rest of ADR-0014 stays accepted.
 - Partially supersedes ADR-0016: its Lighthouse CI gate, which sets budgets without a route or form-factor scope and collects `/` only. The gate now covers every route of `apps/web/e2e/support/routes.ts` on mobile and desktop, with the same budgets. The rest of ADR-0016 stays accepted.
+- Amended in place on 2026-11-05, mandated by the project owner: the long-frame budget splits into a load budget (300 ms) and a scroll budget (100 ms), measured from the page load. The first stage mount of `/` measured 101 to 169 ms at 4× CPU on both tiers (context creation, the first render of the scene, its commit); stage loads during scroll measured 70 to 80 ms.
+- A possible future improvement for the first mount: `StageCanvas` could pass React Three Fiber an async `gl` factory that yields a task before and after creating the `WebGLRenderer`, moving context creation (about 50 ms of that mount) into a task of its own. Measure it before tightening the load budget.
 - Revisit after the trial runs, to adjust the thresholds, or when CI gets a real GPU, which would let the perf budgets move into the gates.
