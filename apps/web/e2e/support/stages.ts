@@ -17,15 +17,34 @@ interface LiveCanvas {
   ambient: boolean;
 }
 
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 interface WindowStage {
   index: number;
   state: string;
   ambient: boolean;
-  canvasClip: Clip | null;
+  canvas: Box | null;
+  window: { width: number; height: number };
 }
 
-export function stageName(route: string, index: number): string {
+function stageName(route: string, index: number): string {
   return `${route} stage ${index}`;
+}
+
+/* A sliver at the window's edge reads as blank: a canvas is audited only once at least half of it, or half the window, is in view on each axis. */
+function auditableClip(canvas: Box, view: WindowStage["window"]): Clip | null {
+  const x = Math.max(canvas.left, 0);
+  const y = Math.max(canvas.top, 0);
+  const width = Math.min(canvas.right, view.width) - x;
+  const height = Math.min(canvas.bottom, view.height) - y;
+  const wideEnough = width >= Math.min(canvas.right - canvas.left, view.width) / 2;
+  const tallEnough = height >= Math.min(canvas.bottom - canvas.top, view.height) / 2;
+  return width > 0 && height > 0 && wideEnough && tallEnough ? { x, y, width, height } : null;
 }
 
 /* The one rule for "in the window": stages loading, waited for and audited all agree on it. */
@@ -36,21 +55,32 @@ function readStagesInWindow(page: Page): Promise<WindowStage[]> {
       if (bottom <= 0 || top >= window.innerHeight) {
         return [];
       }
-      const state = stage.dataset["stage"] ?? "unknown";
-      const ambient = Object.hasOwn(stage.dataset, "ambient");
-      const canvas = stage.querySelector("canvas");
-      if (canvas === null) {
-        return [{ index, state, ambient, canvasClip: null }];
-      }
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.max(rect.left, 0);
-      const y = Math.max(rect.top, 0);
-      const width = Math.min(rect.right, window.innerWidth) - x;
-      const height = Math.min(rect.bottom, window.innerHeight) - y;
-      const canvasClip = width > 0 && height > 0 ? { x, y, width, height } : null;
-      return [{ index, state, ambient, canvasClip }];
+      const rect = stage.querySelector("canvas")?.getBoundingClientRect();
+      const canvas =
+        rect === undefined
+          ? null
+          : { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      return [
+        {
+          index,
+          state: stage.dataset["stage"] ?? "unknown",
+          ambient: Object.hasOwn(stage.dataset, "ambient"),
+          canvas,
+          window: { width: window.innerWidth, height: window.innerHeight },
+        },
+      ];
     }),
   );
+}
+
+/* Stages a viewport renders: one hidden at a breakpoint is not expected to be audited there. */
+export async function renderedStageNames(page: Page, route: string): Promise<string[]> {
+  const indexes = await page.evaluate(() =>
+    [...document.querySelectorAll("[data-slot=stage]")].flatMap((stage, index) =>
+      stage.checkVisibility() ? [index] : [],
+    ),
+  );
+  return indexes.map((index) => stageName(route, index));
 }
 
 async function stagesNotLive(page: Page): Promise<string[]> {
@@ -79,9 +109,8 @@ export async function waitForStagesInWindow(
 
 export async function visibleLiveCanvases(page: Page, route: string): Promise<LiveCanvas[]> {
   const stages = await readStagesInWindow(page);
-  return stages.flatMap(({ index, state, ambient, canvasClip }) =>
-    state === "live" && canvasClip !== null
-      ? [{ name: stageName(route, index), clip: canvasClip, ambient }]
-      : [],
-  );
+  return stages.flatMap(({ index, state, ambient, canvas, window: view }) => {
+    const clip = state === "live" && canvas !== null ? auditableClip(canvas, view) : null;
+    return clip === null ? [] : [{ name: stageName(route, index), clip, ambient }];
+  });
 }

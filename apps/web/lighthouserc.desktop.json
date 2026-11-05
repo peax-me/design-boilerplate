@@ -10,6 +10,7 @@
       }
     },
     "assert": {
+      "aggregationMethod": "median-run",
       "assertions": {
         "categories:performance": [
           "error",

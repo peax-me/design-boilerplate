@@ -11,7 +11,7 @@ import {
 import { auditProgress } from "./support/canvas-capture.ts";
 import { nudgeScroll, settle, visitProgressions } from "./support/page-walk.ts";
 import { routes } from "./support/routes.ts";
-import { stageName, waitForStagesInWindow } from "./support/stages.ts";
+import { renderedStageNames, waitForStagesInWindow } from "./support/stages.ts";
 
 /* With motion allowed, scenes are inserted within about 4 s of the load under software rendering (2.2 s measured): reduced motion is held for twice that after the last scroll. */
 const REDUCED_MOTION_HOLD_MS = 8000;
@@ -62,15 +62,14 @@ function readRenderer(page: Page): Promise<string> {
   });
 }
 
-/* A page that never audits a stage passes vacuously: every stage of the route must have been audited at least once. */
+/* A page that never audits a stage passes vacuously: every stage the viewport renders must have been audited at least once. */
 async function expectEveryStageAudited(
   page: Page,
   route: string,
   frames: CanvasFrame[],
 ): Promise<void> {
-  const stageCount = await page.locator("[data-slot=stage]").count();
   expect(new Set(frames.map(({ canvas }) => canvas))).toEqual(
-    new Set(Array.from({ length: stageCount }, (_, index) => stageName(route, index))),
+    new Set(await renderedStageNames(page, route)),
   );
 }
 

@@ -18,6 +18,10 @@ describe("Lighthouse configuration", () => {
     expect(desktop.ci.collect.settings.preset).toBe("desktop");
   });
 
+  it("judges the median run of three, not the best one", () => {
+    expect(mobile.ci.assert.aggregationMethod).toBe("median-run");
+  });
+
   it("holds the same budgets on mobile and desktop", () => {
     expect(desktop.ci.assert).toEqual(mobile.ci.assert);
   });

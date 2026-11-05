@@ -2,6 +2,8 @@ import { expect, type Page } from "@playwright/test";
 
 const PROGRESSIONS = [0, 0.25, 0.5, 0.75, 1];
 const SETTLE_MS = 300;
+/* An animation that never finishes (paused, or restarted by the page) cannot hold the walk for longer. */
+const FINISH_TIMEOUT_MS = 3000;
 const SCROLL_TIMEOUT_MS = 5000;
 const SCROLL_TOLERANCE_PX = 2;
 
@@ -55,7 +57,7 @@ export async function visitProgressions(
 
 /* A stage fades between its poster and its scene over 500 ms: a capture taken mid-fade shows both. */
 export async function settle(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+  await page.evaluate(async (finishTimeout) => {
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -68,7 +70,12 @@ export async function settle(page: Page): Promise<void> {
       .filter((animation) =>
         Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)),
       );
-    await Promise.allSettled(finite.map((animation) => animation.finished));
-  });
+    await Promise.race([
+      Promise.allSettled(finite.map((animation) => animation.finished)),
+      new Promise((resolve) => {
+        setTimeout(resolve, finishTimeout);
+      }),
+    ]);
+  }, FINISH_TIMEOUT_MS);
   await page.waitForTimeout(SETTLE_MS);
 }
