@@ -53,4 +53,4 @@ Figma library (mirror of this package, code wins): https://www.figma.com/design/
 ## Commands
 
 - `pnpm --filter @repo/ui dev` — Storybook on `:6006`.
-- `pnpm --filter @repo/ui test -- <file>` — one test file; `test:coverage` enforces 90 %.
+- `pnpm --filter @repo/ui exec vitest run <file>` — one test file; `pnpm --filter @repo/ui test:coverage` enforces 90 %.

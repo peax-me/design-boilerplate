@@ -10,7 +10,7 @@ Starting point for every new project: a Turborepo with a Next.js front end and a
 | `pnpm check`                         | Format check, lint, types, tests with coverage, dead code, ADR gate               |
 | `pnpm test:e2e`                      | Production build + WCAG 2.2 AA and design-token audit in the browser              |
 | `pnpm --filter @repo/web lighthouse` | Lighthouse on every route, mobile then desktop (performance ≥ 0.95, others = 1)   |
-| `pnpm --filter <package> test`       | Tests of one package; run a single file with `-- <path>`                          |
+| `pnpm --filter <package> test`       | Tests of one package; one file: `pnpm --filter <package> exec vitest run <path>`  |
 | `pnpm format` / `pnpm lint:fix`      | Fix formatting and auto-fixable lint                                              |
 
 ## Map
