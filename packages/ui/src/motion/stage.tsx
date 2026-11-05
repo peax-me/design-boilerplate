@@ -8,11 +8,11 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useMemo,
   useState,
 } from "react";
 
 import { cn } from "../lib/cn.ts";
-import { whenIdle } from "../lib/idle.ts";
 import {
   implementsWebgl2,
   type QualityTier,
@@ -20,6 +20,7 @@ import {
   supportsWebgl2,
   tierFor,
 } from "../lib/quality-tier.ts";
+import { useIdle } from "../lib/use-idle.ts";
 import { SceneBoundary } from "../scene/scene-boundary.tsx";
 import { loadStageRuntime } from "../scene/stage-runtime.ts";
 import { StagePlayback } from "./stage-playback.tsx";
@@ -41,18 +42,10 @@ const fadeVariants = cva("transition-opacity duration-500", {
   },
 });
 
+/* Read once, when the page first goes idle. */
 function useIdleTier(): QualityTier | null {
-  const [tier, setTier] = useState<QualityTier | null>(null);
-
-  useEffect(
-    () =>
-      whenIdle(() => {
-        setTier(tierFor(readDeviceProfile()));
-      }),
-    [],
-  );
-
-  return tier;
+  const idle = useIdle();
+  return useMemo(() => (idle ? tierFor(readDeviceProfile()) : null), [idle]);
 }
 
 function useNearWindow(root: HTMLElement | null, watching: boolean): boolean {

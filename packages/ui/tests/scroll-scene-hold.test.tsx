@@ -123,11 +123,11 @@ describe("ScrollScene hold", () => {
       ),
     );
     await expect.element(screen.getByText("Scrubbed content")).toBeVisible();
+    await expect.poll(() => timelines).toHaveLength(1);
     const trigger = timelines[0]?.scrollTrigger;
     const start = pageTopOf(screen.container);
     const end = start + sceneLength.medium * window.innerHeight;
 
-    expect(timelines).toHaveLength(1);
     /* A timeline's trigger measures itself on the next tick, once the choreography has filled it. */
     await expect.poll(() => trigger?.end).toBeCloseTo(end, 0);
     expect(trigger?.start).toBeCloseTo(start, 0);

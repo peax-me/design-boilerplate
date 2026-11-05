@@ -64,7 +64,7 @@ describe("ScrollScene", () => {
     );
 
     await expect.element(screen.getByText("Desktop content")).toBeVisible();
-    expect(choreography).toHaveBeenCalledOnce();
+    await expect.poll(() => choreography.mock.calls.length).toBe(1);
     expect(holdOf(screen.container)).toBeCloseTo(sceneLength.medium * window.innerHeight, 0);
   });
 
