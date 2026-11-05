@@ -1,0 +1,268 @@
+---
+name: motion-review
+description: Capture and judge an animated page the way a visitor sees it. Captures are the e2e frame attachments, a Playwright MCP video of a scripted scroll with its ffmpeg contact sheet and arrival strips, frame times and a Chrome DevTools trace with the CPU slowed 4× on the real GPU (95th percentile ≤ 20 ms, no long animation frame over 100 ms), reduced motion and a 390×844 phone. The judgement is a ten-criterion grid scored 1 to 5 against the project's own references, then fix and re-capture, five rounds at most. Use after building or changing a scroll scene, a WebGL stage, a shader, particles, footage or a 3D scene, when a page "feels off", or when asked to review, record or measure motion.
+---
+
+# Motion review
+
+A still cannot tell a calm canvas from a frozen one, a good ease from a linear one, or a smooth scroll from a stutter. This skill records the motion, measures it on a real GPU, and scores it against a written grid. `pnpm test:e2e` already fails a blank or frozen canvas, a WebGL or shader error and a canvas under reduced motion (ADR-0026). This skill judges what the audit cannot: whether the motion is good. The `design-reviewer` agent uses the same grid in its Motion step.
+
+## 1. Before capturing
+
+- **Read what the page promised.** `DESIGN.md`: the direction, its do and don't, the References board, and under `## Page: <name>` the `### Storyboard`: what each scene explains (`Why`), its length and its final state. The grid judges the page against these, not against taste.
+- **References are the project's own.** Compare only with the links on the `DESIGN.md` board and their captures in `.context/` (`design-inspiration`), on the principle the board says to take from each one. Those captures are never versioned, and this skill holds no image: the grid states the expected level in words. Comparing with third-party templates side by side is the user's judgement, never an input here, because copying their look is the failure the grid looks for.
+- **Production build, local server.** `pnpm --filter @repo/web build`, then `pnpm --filter @repo/web start --port <port>` (no `--` before `--port`: pnpm passes it on and `next start` takes it for a directory). Wait for the server with the bounded loop of `shader-craft` `references/capture-stage.md`, and stop only the server you started. Never `pnpm dev`: development mode runs effects twice, ships unminified React and HMR, so its frame times and console are not the shipped page's. A local Conductor workspace owns ten ports from `CONDUCTOR_PORT`, and the dev server, Storybook and e2e take the first three (ADR 0017), so use `$((CONDUCTOR_PORT + 3))`.
+- **Page scripts only against that server.** `browser_evaluate` and `evaluate_script` run any JavaScript in the page. Permissions allow both tools wholesale and cannot filter by URL (ADR-0028), so the rule lives here: never on a third-party URL. The snippets below throw outside `localhost`.
+- **One folder per round:** `.context/motion-review/<page>/round-<n>/`. `.context/` is gitignored. Recordings, sheets and traces are heavy and can be regenerated, so they are never versioned.
+
+## 2. Capture
+
+Every round captures §2.1 to §2.5. A round after a small fix may skip what the fix cannot touch, but never the measurements.
+
+### 2.1 E2E frames
+
+The motion audit attaches one viewport screenshot per scroll progression and project (`frame-<progress>`), rendered on SwiftShader. Use them for composition and for contrast under the copy (`shader-craft` §6) on mobile, tablet and desktop, never for smoothness. Body attachments stay in memory unless a reporter writes them, so run the audit with the JSON reporter and decode them:
+
+```bash
+dir=.context/motion-review/<page>/round-<n>
+E2E_PORT=<port> PLAYWRIGHT_JSON_OUTPUT_FILE=$PWD/$dir/e2e.json \
+  pnpm --filter @repo/web exec playwright test e2e/motion-audit.spec.ts --reporter=list,json
+mkdir -p "$dir/e2e"
+jq -r '.. | objects | select(has("specs")) | .title as $suite | .specs[].tests[] | .projectName as $project
+  | .results[-1].attachments[] | select(.name | startswith("frame-"))
+  | "\($project)\($suite | ascii_downcase | gsub("[^a-z0-9]+"; "-"))-\(.name).png \(.body)"' "$dir/e2e.json" |
+  while read -r file body; do printf '%s' "$body" | base64 --decode > "$dir/e2e/$file"; done
+```
+
+Run it from the repository root after the build. With `E2E_PORT` set to your server's port, Playwright reuses that server.
+
+### 2.2 Recordings (Playwright MCP)
+
+One clip per condition, so that each sheet shows one thing: `scroll-desktop` at 1440×900 (`full` tier), `scroll-phone` at 390×844 (`light` tier, since a narrow screen selects it), and `pointer-desktop`. For each:
+
+1. `mcp__playwright__browser_resize` to the size, `mcp__playwright__browser_emulate_media` with `reducedMotion: "no-preference"` and the page's scheme, then `mcp__playwright__browser_navigate` to `http://localhost:<port>/<route>`.
+2. `mcp__playwright__browser_start_video` with `filename: "<dir>/scroll-desktop.webm"` (relative to the workspace root) and `size` equal to the viewport. Keep the default 25 fps. Leave `cursor` off, because it paces every action by 800 ms and draws over the page.
+3. `mcp__playwright__browser_evaluate` with the scroll snippet below, then `mcp__playwright__browser_stop_video` immediately: every call in between is idle footage.
+
+Never call `browser_video_chapter` or `browser_video_show_actions` while recording. A chapter is a full-screen card on a blurred backdrop, and action callouts draw on the page. Both land in the sheet as if the page drew them.
+
+The scroll snippet waits until the stages in the window are live (it nudges the scroll, because `light` waits for a first interaction), then scrolls the whole page at a constant 1.2 s per screen, measuring every frame. Use the same function for the recording and for the measurement (§2.4):
+
+```js
+async () => {
+  if (!["localhost", "127.0.0.1"].includes(location.hostname)) {
+    throw new Error("Page scripts run against the project's local server only");
+  }
+  if (!PerformanceObserver.supportedEntryTypes.includes("long-animation-frame")) {
+    throw new Error("Long animation frames need Chrome 123 or later");
+  }
+  const inWindow = () =>
+    [...document.querySelectorAll("[data-slot=stage]")].filter((stage) => {
+      const { top, bottom } = stage.getBoundingClientRect();
+      return bottom > 0 && top < innerHeight;
+    });
+  const deadline = performance.now() + 20000;
+  while (inWindow().some((stage) => stage.dataset.stage !== "live")) {
+    if (performance.now() > deadline) throw new Error("A stage in the window never went live");
+    scrollTo(0, scrollY === 0 ? 1 : 0);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  scrollTo(0, 0);
+  const SECONDS_PER_SCREEN = 1.2;
+  const scrollable = document.documentElement.scrollHeight - innerHeight;
+  const duration = Math.max(scrollable / innerHeight, 1) * SECONDS_PER_SCREEN * 1000;
+  const longFrames = [];
+  const observer = new PerformanceObserver((list) => {
+    longFrames.push(...list.getEntries().map((entry) => Math.round(entry.duration)));
+  });
+  observer.observe({ type: "long-animation-frame" });
+  const deltas = [];
+  await new Promise((resolve) => {
+    let start;
+    let previous;
+    const step = (now) => {
+      start ??= now;
+      if (previous !== undefined) deltas.push(now - previous);
+      previous = now;
+      const progress = Math.min((now - start) / duration, 1);
+      scrollTo(0, progress * scrollable);
+      if (progress < 1) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+  longFrames.push(...observer.takeRecords().map((entry) => Math.round(entry.duration)));
+  observer.disconnect();
+  deltas.sort((first, second) => first - second);
+  const p95 = deltas[Math.ceil(deltas.length * 0.95) - 1];
+  return {
+    seconds: Math.round(duration / 100) / 10,
+    frames: deltas.length,
+    p95FrameMs: Math.round(p95 * 10) / 10,
+    longFramesMs: longFrames,
+    pass: p95 <= 20 && Math.max(0, ...longFrames) <= 100,
+  };
+}
+```
+
+`longFramesMs` lists every long animation frame (50 ms and over); only those above 100 ms fail.
+
+The pointer clip: centre the signature stage in the window (`browser_evaluate` with `() => document.querySelectorAll("[data-slot=stage]")[<index>].scrollIntoView({ block: "center" })`), start the video, run the sweep, then stop. The sweep draws a figure eight over the window for 4 s, then holds still for 2 s, which gives the clip both the pointer response and the scene at rest. Scenes listen to `pointermove` on `window` for mouse pointers only, and the dispatched events bubble there:
+
+```js
+async () => {
+  if (!["localhost", "127.0.0.1"].includes(location.hostname)) {
+    throw new Error("Page scripts run against the project's local server only");
+  }
+  const SWEEP_MS = 4000;
+  await new Promise((resolve) => {
+    let start;
+    const step = (now) => {
+      start ??= now;
+      const turn = Math.min((now - start) / SWEEP_MS, 1) * Math.PI * 2;
+      const clientX = innerWidth * (0.5 + 0.35 * Math.sin(turn));
+      const clientY = innerHeight * (0.5 + 0.3 * Math.sin(turn * 2));
+      const target = document.elementFromPoint(clientX, clientY) ?? document.body;
+      target.dispatchEvent(new PointerEvent("pointermove", { clientX, clientY, pointerType: "mouse", bubbles: true }));
+      if (turn < Math.PI * 2) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+}
+```
+
+### 2.3 Contact sheet and strips (ffmpeg)
+
+The contact sheet shows the rhythm at a glance. The base command samples 4 frames a second into one 4×4 tile, so it covers the first four seconds of a clip. Use it as is for a clip of four seconds or less, such as one beat:
+
+```bash
+ffmpeg -i rec.webm -vf "fps=4,scale=480:-2,tile=4x4:padding=4" -frames:v 1 -update 1 sheet.png
+```
+
+A whole-page scroll lasts longer, and the clip starts and ends with idle footage from the tool calls. Keep the span where the page moves (frames whose scene score passes 0.01) and spread the 16 tiles over it:
+
+```bash
+clip=$dir/scroll-desktop.webm
+read -r start end < <(ffmpeg -v error -i "$clip" -vf "scale=360:-2,select='gt(scene,0.01)',metadata=print:file=-" -an -f null - |
+  awk -F'pts_time:' '/pts_time/ { time = $2 + 0; if (first == "") first = time; last = time } END { print first, last }')
+ffmpeg -v error -ss "$start" -to "$end" -i "$clip" -vf "fps=16/($end-$start),scale=480:-2,tile=4x4:padding=4" -frames:v 1 -update 1 "$dir/sheet-desktop.png"
+```
+
+Tile `k` (from 0, left to right then down) sits at `start + k × (end − start) / 16` seconds. A sheet cannot show an ease, so add a strip for every arrival of the signature: 12 frames over one second, where the spacing between frames is the curve. A decelerating arrival moves far in the first frames and barely in the last.
+
+```bash
+ffmpeg -v error -ss <seconds> -t 1 -i "$clip" -vf "fps=12,scale=480:-2,tile=4x3:padding=4" -frames:v 1 -update 1 "$dir/strip-<beat>.png"
+```
+
+From the pointer clip, take one strip over the sweep and one over the last two seconds (`-t 2`, `fps=6`), which shows the scene at rest.
+
+### 2.4 Frame budget and trace (Chrome DevTools MCP)
+
+SwiftShader and headless timings mean nothing, so measure in the headed Chrome that `chrome-devtools-mcp` launches on the machine's GPU, at both tiers, each pass from a fresh load. A stage that loads during the scroll is what a visitor meets, and a second pass on a warm page hides the long frame of its first load.
+
+1. `mcp__chrome-devtools__new_page` with the local URL, which returns the `pageId`.
+2. `mcp__chrome-devtools__emulate` with `cpuThrottlingRate: 4`, `prefersReducedMotion: "no-preference"`, and `viewport: "1440x900x2"` (`full`) or `"390x844x3,mobile,touch"` (`light`). Each call replaces every emulation setting, so pass them together.
+3. `mcp__chrome-devtools__navigate_page` with `type: "reload"`. The stage picks its tier at load, so the emulation has to come before it.
+4. `mcp__chrome-devtools__evaluate_script` reads the renderer. If it names SwiftShader, llvmpipe or a software renderer, the numbers are void: never pass `--headless` to the server, and measure on a machine with a GPU.
+
+   ```js
+   () => {
+     const context = document.createElement("canvas").getContext("webgl2");
+     const extension = context?.getExtension("WEBGL_debug_renderer_info");
+     return extension ? String(context.getParameter(extension.UNMASKED_RENDERER_WEBGL)) : "unknown";
+   }
+   ```
+
+5. `mcp__chrome-devtools__evaluate_script` with the scroll snippet of §2.2. This untraced pass is the verdict: p95 ≤ 20 ms and no long animation frame above 100 ms.
+6. Reload, then `mcp__chrome-devtools__performance_start_trace` with `reload: false` and `autoStop: false`, the scroll snippet again, and `mcp__chrome-devtools__performance_stop_trace` with an absolute `filePath` to `<dir>/trace-<tier>.json.gz`. The trace explains a failure: tracing adds overhead, so never use it for the verdict. Open the insights it lists with `mcp__chrome-devtools__performance_analyze_insight`, copying the `insightSetId` and `insightName` exactly. A layout shift reported during the scripted scroll is usually a pin switching to `fixed`, because a script scroll is not user input. Load-time CLS is Lighthouse's job, so chase a scroll shift only if the recording shows content jumping.
+7. `mcp__chrome-devtools__list_console_messages` with `types: ["error", "warn"]`. Only WebGL and shader messages count, as in the audit.
+8. Reset with `mcp__chrome-devtools__emulate` and the `pageId` alone, then `mcp__chrome-devtools__close_page`.
+
+Record per tier in the round: renderer, `seconds`, `frames`, `p95FrameMs`, `longFramesMs`.
+
+### 2.5 Reduced motion and the phone
+
+- `mcp__playwright__browser_emulate_media` with `reducedMotion: "reduce"`, then `mcp__playwright__browser_take_screenshot` with `fullPage: true` and a `filename` in the round folder, at 1440×900 and at 390×844. The page must be complete: every message in HTML, a poster or still plate for every beat, no canvas. Set `reducedMotion` back to `"no-preference"` afterwards.
+- At 390×844 with motion, the `scroll-phone` clip and sheet are the evidence, plus a screenshot of the first viewport before any interaction: the phone shows the poster until then.
+- When the page's colours change with the scheme (the stage reads theme tokens), screenshot each signature beat in the other scheme too: the veil and the token colours differ.
+
+## 3. The grid
+
+Ten criteria, each scored 1 to 5. The expected level is that of a hand-made studio site: deliberate, specific to this brand, finished in every frame.
+
+| Score | Meaning                                                                         |
+| ----- | ------------------------------------------------------------------------------- |
+| 5     | At or above the best reference on the board for this criterion; nothing to change |
+| 4     | At the references' level; flaws only visible frame by frame                     |
+| 3     | Competent but generic, or one flaw a visitor would notice                       |
+| 2     | A defect a visitor notices at once                                              |
+| 1     | Absent or broken                                                                |
+
+| Criterion                | A 5 looks like                                                                                                                                                                                                 | It scores 3 or less when                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1. Message legibility    | The first viewport states the offer and the primary action at a glance, before any motion completes. The copy reads over the effect on every frame and tier, and the effect frames the message rather than competing with it | The copy fights the effect, the veil fails on some frame, the headline waits for an animation, or a message lives only in the canvas |
+| 2. One signature idea    | One moment a visitor can retell in one sentence, and that sentence names the product's mechanism or promise (the storyboard's `Why`). The other scenes lead to it or echo it | Two effects compete, removing the moment would lose nothing, or the effect would fit another product unchanged |
+| 3. Depth and light       | Planes that separate in motion; light with a source, a direction and falloff; glow only on hot cores; dark gradients without banding; grain where the direction wants a shot rather than a render | Flat single plane, light from nowhere, over-bright bloom turning the frame to haze, banding |
+| 4. Curves and arrivals   | Every element decelerates into its resting state (the strip's spacing shrinks); phases overlap so a scene reads as one gesture; eases and durations come from tokens; the scrub never steps; the poster-to-canvas crossfade is invisible | Linear starts or stops, pops, every element arriving at once with nothing leading, a jump or stutter in a strip, overshoot the direction did not ask for |
+| 5. Life at rest          | When the scroll stops, the signature keeps breathing, slowly enough to read the copy over it, with no visible loop seam. An ambient stage has its pause control, and pausing holds the frame | Frozen, restless enough to pull the eye from the copy, a visible seam, or an ambient stage with no pause control |
+| 6. Pointer response      | The scene answers the mouse with weight (smoothed, slightly behind), in proportion, and the answer means something: the light follows, the matter parts. A touch does nothing because the finger scrolls, and the wheel is never captured | No response on desktop, a jittery one-to-one follow, a reaction that breaks the composition or covers copy, or a captured wheel |
+| 7. Coherence with DESIGN.md | Colours resolve from theme tokens (a scheme swap recolours the scene); the motion personality matches the direction's words; materials and light match its world; nothing from its "Don't" list appears | A colour outside the theme, a motion personality from elsewhere, or a reference's look instead of its principle |
+| 8. Originality           | None of the forbidden clichés, and no brand in the category could ship it unchanged. It borrows principles from the references, never their look | A cliché, even recoloured or renamed; the category's default image; a reference reproduced |
+| 9. Performance           | On both tiers at 4× CPU: p95 well under 20 ms and no long animation frame over 100 ms during the scroll, stage loads included. A 4 is within the thresholds | Any threshold missed on either tier caps the score at 2, because a threshold is a gate. A known Lighthouse failure caps it at 2 too |
+| 10. Fallback quality     | Under reduced motion or without WebGL2 the page is complete: posters and still plates carry every beat, no canvas. The poster is the first frame (no pop at the crossfade) and crops like the canvas on every viewport. The phone's poster before the first interaction looks intended | A pop, a still that does not match its beat, a missing beat, a poster cropped unlike the canvas |
+
+**Forbidden clichés.** When one of these is the signature, criterion 8 scores 1:
+
+- **The generic gradient blob**, because it is a placeholder for an idea and says nothing about the product.
+- **The generic particle sphere** (galaxy, vortex), because it is particles with nothing to become.
+- **The glowing hero orb**, which is light without matter or meaning: the default "AI" image.
+- **The bento grid**, because it lists features in tiles instead of telling them in sequence.
+
+A cliché is judged by what it shows, not by its name, and a new colour does not rescue it.
+
+**Pass:** every criterion scores 4 or more. Never average: one 3 is what a visitor remembers, whether the stutter or the cliché.
+
+## 4. Scoring rules
+
+- **Evidence first.** Each score cites its evidence: a sheet tile, a strip frame, a measured number, a trace insight, a screenshot. A criterion without evidence gets no score until you capture what it needs.
+- **Order.** Score from the sheets (rhythm, legibility per beat), then the strips (curves, rest, pointer), the measurements, the reduced-motion and phone captures, and the references last. Judging the references first anchors you on their look.
+- **References on their principle.** For each criterion where the board names a reference's principle (a light, a pace, a type move), ask whether the page reaches that level on that principle. Never ask whether it looks like the reference.
+- **All ten every round.** A fix to one criterion can break another (stronger bloom hurts legibility, a heavier scene hurts performance).
+- **Never pass by removal.** Dropping the idle drift, the pointer response or a scene to clear a criterion lowers the page. Remove one only when the storyboard changes first and the change is logged.
+
+## 5. The loop
+
+1. Capture into the round folder, score, and write `scores.md` there: one row per criterion with score, evidence, cause and fix.
+2. If every criterion is at 4 or more, stop and report.
+3. Fix the causes of the lowest scores first, at their source, through the skill that owns them: the look in `shader-craft`, `gpu-particles`, `cinematic-footage` or `scene-3d`; the choreography in `scroll-storytelling`; tokens and components in `design-system`; an asset in `asset-production`, where paid calls stay under the page cap. After a change to the look, re-capture the poster (`shader-craft` §7) before the next round, because the fallback criterion depends on it.
+4. Re-capture into `round-<n+1>` and score all ten again.
+5. Five rounds at most. After the fifth, stop looping and report what still fails. Repeating a fix that did not work hides the problem instead of solving it.
+
+In an autonomous run (started by `signature-experience`), add one line per round under `## Decisions` in `DESIGN.md`: the criteria below 4 and the fix chosen. Five rounds without a pass is not a stop: the caller goes on and carries the report.
+
+## 6. Report
+
+Write `.context/motion-review/<page>/report.md` and give its summary to the caller:
+
+- Verdict: pass, or the criteria still under 4.
+- The last round's scores with their evidence.
+- Per tier: renderer, p95 frame time, longest animation frame, and whether a stage load caused it.
+- One line per round: what failed and what was changed.
+- The files of the last round: clips, sheets, strips, traces, e2e frames, screenshots.
+- If it did not pass: the next fix you would make, and why the five rounds did not get there.
+
+## Avoid
+
+- Judging motion from stills, or scoring from memory of an earlier round.
+- Capturing on `pnpm dev`, headless Chrome or SwiftShader; measuring a warm page; using the traced pass as the verdict.
+- Chapter cards, action overlays or the animated cursor in a recording.
+- Page scripts on any URL other than the local server.
+- Comparing with images that are not on the project's board, versioning a capture, or adding images to a skill.
+- Averaging the grid; passing a criterion by removing what it judges; a sixth round.
+- Reading a scroll-time layout shift in the trace as a load problem.
+
+## Reference skills
+
+`shader-craft` (contrast on real frames §6, poster §7, budgets and cost knobs §9), `gpu-particles` §11 and `scene-3d` §7 (per-technique budgets), `cinematic-footage` (seams and sequences), `scroll-storytelling` (storyboard, eases and tokens), `review-animations` and `emil-design-eng` (motion craft), `design-inspiration` (the board), and the `design-reviewer` agent, which scores the same grid.
