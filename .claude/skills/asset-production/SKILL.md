@@ -152,6 +152,7 @@ width=1280                                                # the slot's rendered 
 frame=$(mktemp -d)                                        # the PNG intermediate is never versioned
 ffmpeg -i "$master" -an -vf "scale=$width:-2:flags=lanczos" -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p -movflags +faststart "$loop.mp4"
 ffmpeg -i "$master" -an -vf "scale=$width:-2:flags=lanczos" -c:v libvpx-vp9 -crf 34 -b:v 0 -row-mt 1 "$loop.webm"
+# the poster: desktop pair only. Skip these two lines for the phone pair, which reuses it: they would overwrite it at 720 px
 ffmpeg -i "$master" -frames:v 1 -vf "scale=$width:-2:flags=lanczos" "$frame/first.png"
 avifenc --speed 6 --qcolor 65 --yuv 420 --depth 8 "$frame/first.png" apps/web/src/features/<feature>/images/<slot>-poster.avif
 ```
@@ -162,7 +163,7 @@ avifenc --speed 6 --qcolor 65 --yuv 420 --depth 8 "$frame/first.png" apps/web/sr
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Page image                            | `apps/web/src/features/<feature>/images/<slot>-<subject>[-<scheme>].<ext>`, imported statically                    |
 | Video poster (loop, sequence, canvas) | `apps/web/src/features/<feature>/images/<slot>-poster.avif`, imported statically, never under `public/`            |
-| Video loop                            | `apps/web/public/media/<feature>/<slot>-<subject>.{mp4,webm}`                                                      |
+| Video loop                            | `apps/web/public/media/<feature>/<slot>-<subject>.{mp4,webm}`, and `<slot>-<subject>-mobile.{mp4,webm}` for a phone pair (§6) |
 | Frame sequence, scroll clip           | `apps/web/public/media/<feature>/<shot>/` (`cinematic-footage` §3)                                                 |
 | 3D model, HDRI, splat                 | `apps/web/public/models/<name>.glb`, `apps/web/public/hdri/<name>.hdr`, `apps/web/public/splats/<name>-<tier>.spz` |
 | Social and app icons                  | `opengraph-image.tsx`, `icon.svg`, `apple-icon.png` in `apps/web/src/app/` (code, tokens, real copy)               |

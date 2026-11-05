@@ -41,6 +41,7 @@ Work in this order: shot list, keyframes, drafts, review, finalize, review, chai
 - Chaining and loops need start and end frames: the model must list `supportsStartFrame` and `supportsEndFrame` (`keyframes.start`, `keyframes.end`). Keyframes and `references[]` exclude each other (`prohibitedWith` in the catalog), so style consistency comes from the keyframe images themselves.
 - Among the models that qualify, prefer `agentRecommendation.tier: "sota"`, then the lowest `rank`; copy the `slug` verbatim. Never pick a model, a resolution or a price from memory: the catalog and `simulate_cost` change.
 - Prefer a model whose `resolutions` list `Draft`: a draft at that resolution can be finalized into the same shot (below).
+- This ranking supersedes the model order that ADR-0027 records (Seedance 2.5 first, from the catalog of 2026-11-04): the live catalog decides.
 
 **Keyframes.** Design the boundary frames as stills first, they are cheap and fix the look: `images_models_list { onlyRecommended: true }`, then `images_generate` at the shot's aspect ratio, prompt assembled as in `asset-production` §4. The first keyframe of the first shot becomes the look of the poster. Compose every keyframe with the subject inside the central 3:4 band, because phones see a centred 3:4 crop of the same frames (§3). The first approved keyframe is the style reference of the others.
 
@@ -86,7 +87,7 @@ A match cut, a match on action or a camera move through a cut requires chained s
 
 **Budget.** 30,000 credits per page, exploration, drafts and retries included; Magnific is the only paid provider.
 
-- Plan within the cap before the first quote: with the cap and the page's `spent` in view, choose the number and length of shots, or carry a beat with 2.5D relief (§6) instead of video. Once a priced plan would pass the cap, do not re-plan on your own: an autonomous run stops and asks (`asset-production` §3), with the cheaper variant as an option in the question.
+- Plan within the cap before the first quote: with the cap and the page's `spent` in view, choose the number and length of shots, or carry a beat with 2.5D relief (§6) instead of video. Never fit the cap by shortening a shot below the scroll its storyboard beat needs: drop a shot or move a beat to relief instead. Once a priced plan would pass the cap, do not re-plan on your own: an autonomous run stops and asks (`asset-production` §3), with the cheaper variant as an option in the question.
 - Price the whole plan before the first call: `simulate_cost` with the exact arguments of every keyframe, draft and final, plus one retry per final shot, a ranged quote counting at its top (`asset-production` §3). `video_finalize_draft` is not in `simulate_cost`: count it at the price of the equivalent `video_generate` at final resolution, an upper bound.
 - `simulate_cost` again before each paid call (arguments drift). `account_balance` keeps no history: read it right before and right after `video_finalize_draft`, and record the difference as its real cost.
 - Record every paid call and its credits in `assets/provenance.json` with the page's running total (`asset-production` owns the format).
