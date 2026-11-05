@@ -24,7 +24,7 @@ describe("Stage without WebGL2", () => {
 
     await afterIdle();
 
-    expect(getContext).toHaveBeenCalledWith("webgl2");
+    expect(getContext).toHaveBeenCalledExactlyOnceWith("webgl2");
     await expect.element(screen.getByRole("img", { name: "Flat box" })).toBeVisible();
     expect(screen.container.querySelector("canvas")).toBeNull();
     expect(stageAt(screen.container).dataset["stage"]).toBe("poster");

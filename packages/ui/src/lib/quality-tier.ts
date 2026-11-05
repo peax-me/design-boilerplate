@@ -22,11 +22,17 @@ export function tierFor(profile: DeviceProfile): QualityTier | null {
   return "full";
 }
 
-/* Creating a context is the costly probe: ask only when a scene is about to mount. The answer cannot change within a page, so a scene asking again must not open another context. */
-let webgl2Supported: boolean | undefined;
+/* Creating a context is the costly probe: ask only when a scene is about to mount, and release the context at once, so it never counts against the browser's cap on live contexts.
+   A yes cannot change within a page, so a scene asking again opens no other context. A no may be transient (contexts exhausted for a moment), so the next scene asks again. */
+let webgl2Supported = false;
 
 export function supportsWebgl2(): boolean {
-  webgl2Supported ??= document.createElement("canvas").getContext("webgl2") !== null;
+  if (webgl2Supported) {
+    return true;
+  }
+  const context = document.createElement("canvas").getContext("webgl2");
+  context?.getExtension("WEBGL_lose_context")?.loseContext();
+  webgl2Supported = context !== null;
   return webgl2Supported;
 }
 

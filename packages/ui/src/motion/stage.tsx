@@ -166,13 +166,15 @@ function useLoadingTier(): QualityTier | null {
   return tier;
 }
 
-/* The tier to run the scene at once it may load, is prepared, nears the window and the device can create a WebGL2 context. Creating a context is the costliest probe: it is made only for a scene about to mount, so a page that never loads one never pays for it. Without WebGL2 the poster stays for the life of the page. */
+/* The tier to run the scene at once it may load, is prepared, nears the window and the device can create a WebGL2 context. Creating a context is the costliest probe: it is made only for a scene about to mount, so a page that never loads one never pays for it. Each stage asks once: without WebGL2 its poster stays for the life of the page. */
 function useSceneTier(root: HTMLElement | null, prepareScene?: PrepareScene): QualityTier | null {
   const tier = useLoadingTier();
   const prepared = usePreparedScene(tier, prepareScene);
   const near = useNearWindow(root, tier !== null);
+  const mayMount = tier !== null && prepared && near;
+  const webgl2 = useMemo(() => mayMount && supportsWebgl2(), [mayMount]);
 
-  if (tier === null || !prepared || !near || !supportsWebgl2()) {
+  if (tier === null || !webgl2) {
     return null;
   }
   return tier;

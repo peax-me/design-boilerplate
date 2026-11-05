@@ -49,14 +49,17 @@ function countCanvasInsertions(page: Page): Promise<number> {
   return page.evaluate(() => Number(Reflect.get(window, "insertedCanvases")));
 }
 
+/* The probe context is released at once, so the page's own stages keep the browser's contexts to themselves. */
 function readRenderer(page: Page): Promise<string> {
   return page.evaluate(() => {
     const context = new OffscreenCanvas(1, 1).getContext("webgl2");
     const extension = context?.getExtension("WEBGL_debug_renderer_info");
-    if (context === null || extension === null || extension === undefined) {
-      return "unknown";
-    }
-    return String(context.getParameter(extension.UNMASKED_RENDERER_WEBGL));
+    const renderer =
+      context === null || extension === null || extension === undefined
+        ? "unknown"
+        : String(context.getParameter(extension.UNMASKED_RENDERER_WEBGL));
+    context?.getExtension("WEBGL_lose_context")?.loseContext();
+    return renderer;
   });
 }
 

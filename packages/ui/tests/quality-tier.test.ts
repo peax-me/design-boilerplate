@@ -10,16 +10,29 @@ const capableDesktop: DeviceProfile = {
 
 interface DeviceSignals {
   matchingQueries?: readonly string[];
-  webgl2?: boolean;
+  webgl2?: () => boolean;
+}
+
+interface ProbeContext {
+  getExtension: (name: string) => { loseContext: () => void } | null;
+}
+
+const loseContext = vi.fn<() => void>();
+
+function probeContext(): ProbeContext {
+  return {
+    getExtension: (name) => (name === "WEBGL_lose_context" ? { loseContext } : null),
+  };
 }
 
 /* The unit project runs in node: the window and the document are stubbed down to what the lib reads. */
-function stubDevice({ matchingQueries = [], webgl2 = true }: DeviceSignals = {}) {
-  const createElement = vi.fn<(tag: string) => { getContext: (kind: string) => object | null }>(
-    (tag) => ({
-      getContext: (kind) => (tag === "canvas" && kind === "webgl2" && webgl2 ? {} : null),
-    }),
-  );
+function stubDevice({ matchingQueries = [], webgl2 = () => true }: DeviceSignals = {}) {
+  const createElement = vi.fn<
+    (tag: string) => { getContext: (kind: string) => ProbeContext | null }
+  >((tag) => ({
+    getContext: (kind) =>
+      tag === "canvas" && kind === "webgl2" && webgl2() ? probeContext() : null,
+  }));
   vi.stubGlobal("window", {
     matchMedia: (query: string) => ({ matches: matchingQueries.includes(query) }),
   });
@@ -35,6 +48,7 @@ function freshQualityTier() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  loseContext.mockClear();
 });
 
 describe("tierFor", () => {
@@ -85,14 +99,30 @@ describe("readDeviceProfile", () => {
 });
 
 describe("supportsWebgl2", () => {
-  it.each([true, false])("answers %s once per page, however many scenes ask", async (webgl2) => {
-    const createElement = stubDevice({ webgl2 });
+  it("answers yes once per page, however many scenes ask", async () => {
+    const createElement = stubDevice();
     const { supportsWebgl2 } = await freshQualityTier();
 
     const answers = [supportsWebgl2(), supportsWebgl2(), supportsWebgl2()];
 
-    expect(answers).toStrictEqual([webgl2, webgl2, webgl2]);
+    expect(answers).toStrictEqual([true, true, true]);
     expect(createElement).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the context it probed with, so it never counts against the browser's live contexts", async () => {
+    stubDevice();
+    const { supportsWebgl2 } = await freshQualityTier();
+
+    supportsWebgl2();
+
+    expect(loseContext).toHaveBeenCalledOnce();
+  });
+
+  it("asks again after a no, which contexts exhausted for a moment can cause", async () => {
+    stubDevice({ webgl2: vi.fn<() => boolean>().mockReturnValueOnce(false).mockReturnValue(true) });
+    const { supportsWebgl2 } = await freshQualityTier();
+
+    expect([supportsWebgl2(), supportsWebgl2()]).toStrictEqual([false, true]);
   });
 });
 
