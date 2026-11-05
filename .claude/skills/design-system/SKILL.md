@@ -29,7 +29,7 @@ Never work around the system: no arbitrary values (`p-[13px]`), no inline styles
    - Navigation is a link (`ButtonLink`, `TextLink`), an action is a `Button`.
 3. Pure logic gets a unit test in `packages/ui/tests/`.
 4. Add the component and its props to the inventory in `packages/ui/AGENTS.md`.
-5. Mirror it in the Figma library and add its Code Connect template in `packages/ui/figma/` (`figma-sync` skill).
+5. Mirror it in the Figma library and add its Code Connect template in `packages/ui/figma/` (`figma-sync` skill). Canvas hosts and motion primitives are exempt (`packages/ui/AGENTS.md`).
 
 ## Add a token
 

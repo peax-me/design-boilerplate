@@ -36,7 +36,7 @@ An orb, a lens or a crystal earns its row when it explains something, such as a 
 
 Rules, each for a reason:
 
-- Apps never touch a canvas, a class or a style: the effect is a `@repo/ui` component with a story, a `data-slot`, a row in `packages/ui/AGENTS.md` and a Code Connect template in `packages/ui/figma/`, built through `design-system` with its tests first.
+- Apps never touch a canvas, a class or a style: the effect is a `@repo/ui` component with a story, a `data-slot`, a row in `packages/ui/AGENTS.md` (no Code Connect template: a canvas host has no Figma component, `packages/ui/AGENTS.md`), built through `design-system` with its tests first.
 - The GLSL lives in the scene file, next to the uniforms it reads: one file to read when the look changes, and the shader ships in the lazy chunk, never in the page bundle. When the file nears the 250-line lint limit, its strings move to `<effect>-shaders.ts` beside it.
 - **Plan the split from the start** for any scene with CPU-side motion: the lint caps a file at 250 lines and 10 imports and a function at 3 parameters. `<effect>-shaders.ts` (GLSL and material), `<effect>.ts` (a non-React factory, `advance`, disposal), `<effect>-motion.ts` (per-frame CPU motion: paths, beads, a follow), `<effect>-scene.tsx` (hooks and JSX only). Factories take `(input, input, look)`, with every tunable in one look object.
 - Shared GLSL lives once, in `shader-chunks.ts`, created by the first effect of a project that needs it from `references/shader-chunks.md`; every scene interpolates from it (`${HASH}${GRADIENT_NOISE}${FBM}`). A second copy is a defect.

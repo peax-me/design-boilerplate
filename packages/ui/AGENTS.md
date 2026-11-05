@@ -13,7 +13,7 @@ Figma library (mirror of this package, code wins): https://www.figma.com/design/
 - Every component has a story in `stories/` (stories are tests: `play` + accessibility check). A wrapper that draws nothing of its own (`AfterIdle`) has none: its tests cover it. Logic has unit tests in `tests/`.
 - Import paths: `@repo/ui/<folder>/<file>` (no barrel files).
 - GSAP and Lenis never load before the first paint. A component that needs them puts that code in a module of its own and renders it lazily inside `AfterIdle`, as `MotionProvider`, `ScrollScene` and `BlockStage` do. Motion arrives after the visitor has seen the page painted, so an entrance never hides what is already in view: it goes through `enterUnseen` (`src/motion/enter-unseen.ts`), which plays it as unseen content enters the window and leaves content in view as painted. A static `gsap` import in a component of the first load puts it back on the critical path (about 50 KB gzipped) and costs Lighthouse mobile its LCP margin.
-- A new or changed component updates its Code Connect template in `figma/<component>.figma.ts`.
+- A new or changed component updates its Code Connect template in `figma/<component>.figma.ts`. Canvas hosts and motion primitives (`Stage`, `BlockStage`, `ScrollScene`, `AfterIdle`, a project's effect components) have none: the Figma library holds their poster or their content, never their motion.
 
 ## Inventory
 
