@@ -5,7 +5,7 @@ description: Turn a page's copy into long, choreographed scroll animations and b
 
 # Scroll storytelling
 
-Long animations that feel effortless come from a storyboard, not from effects. Each scene tells one beat of the copy; the scroll is the timeline.
+Long animations that feel effortless come from a storyboard, not from effects. Each scene tells one beat of the copy; the scroll is the timeline. How the page moves as one piece (its motion language, the transitions between sections and shots, the pacing and the camera) is decided first with `motion-design`; this skill builds it with GSAP.
 
 ## 1. Budget
 
@@ -36,15 +36,17 @@ Choreography:
   30–70%  …
   70–100% …
 Why: <what the motion explains>
+Lead: <the one element that carries each phase>
+Intensity: <1 to 5>
 Pointer: <what it does> | none, because <reason>
 Ambient (a scene with a WebGL stage): yes | no
 ```
 
-Every scene fills `Pointer`, kinetic type and other stage-less scenes included: a signature with no pointer channel says so here, and `motion-review` scores its pointer criterion against it.
+Eases, durations, staggers and directions come from `## Motion language`, and each scene's first and last phases carry its rows of `### Transitions` (`motion-design` §1, §3); `Lead` and `Intensity` follow `motion-design` §4. Every scene fills `Pointer`, kinetic type and other stage-less scenes included: a signature with no pointer channel says so here, and `motion-review` scores its pointer criterion against it.
 
 **Interactive:** get the user's approval before coding.
 
-**Autonomous** (a run started by the `signature-experience` skill from a brief, ADR-0028): do not wait. Record the blocks under `### Storyboard` in the page's `## Page: <name>` section of `DESIGN.md`, check them yourself, and code. The check: the page keeps the budget of §1 and has one signature moment; each scene shows a sequence, a cause or a continuity (§2); each lasts one to three screens; the final state is a complete composition; durations, easings and staggers are tokens; the `Why` names what the motion explains. Fix what fails, note the fix in the block, and go on.
+**Autonomous** (a run started by the `signature-experience` skill from a brief, ADR-0028): do not wait. Record the blocks under `### Storyboard` in the page's `## Page: <name>` section of `DESIGN.md`, check them yourself, and code. The check: the page keeps the budget of §1 and has one signature moment; each scene shows a sequence, a cause or a continuity (§2); each lasts one to three screens; the final state is a complete composition; durations, easings and staggers are the tokens `## Motion language` names; every boundary of the scene has its row in `### Transitions`, carried by its first or last phase; the `Why` names what the motion explains. Fix what fails, note the fix in the block, and go on.
 
 ## 4. Build
 
@@ -79,6 +81,7 @@ Rules:
 - One `ScrollTrigger` per scene (the one `ScrollScene` creates). Nested timelines, not nested triggers.
 - `ScrollScene` holds its stage with CSS (`sticky` in a track one window taller per screen of `length`) and scrubs the track, so a scene shifts no layout. Never add `pin` to a trigger: a pin switches the element to `position: fixed` and inserts a spacer, which field CLS counts as layout shift even when nothing visibly jumps.
 - A scene that hosts a WebGL stage tweens the page's `{ value }` progress object and never the stage's internals (`shader-craft` §3).
+- A transition across a boundary is built inside the outgoing scene's track, while its stage is still held: its last phases resolve the stage toward the next section's surface, carry an element into it, or wipe the next surface over it, so the frame that the sticky track releases already matches what follows (`motion-design` §3, "Stage to flat"). An element shared across the boundary travels in the timeline of the scene that spans it, or moves between two layouts with Flip (`gsap-plugins`).
 - A recurring pattern (counter, wipe, split headline) becomes a motion primitive in `packages/ui/src/motion/` with a story and a test, through the `design-system` skill.
 
 ## 5. Kinetic type
@@ -130,4 +133,4 @@ A treatment that needs layout to hold its box (the stacked cell of a word cycle,
 
 ## Reference skills
 
-`gsap-scrolltrigger`, `gsap-timeline`, `gsap-react`, `gsap-plugins` (SplitText, ScrambleText, Flip), `gsap-performance`, `emil-design-eng` (motion craft), then the technique skills when a scene is a stage: `shader-craft` (surfaces, light, post-processing), `gpu-particles`, `cinematic-footage` (AI footage, scroll-driven sequences) and `scene-3d` (models, water, splats). Known issue: the horizontal-scroll example in `gsap-scrolltrigger` is wrong (`Max.max` typo, pixels passed to `xPercent`); use `x: () => -(track.scrollWidth - window.innerWidth)` with `ease: "none"`.
+`motion-design` (motion language, transitions, pacing, camera), `gsap-scrolltrigger`, `gsap-timeline`, `gsap-react`, `gsap-plugins` (SplitText, ScrambleText, Flip), `gsap-performance`, `emil-design-eng` (motion craft), then the technique skills when a scene is a stage: `shader-craft` (surfaces, light, post-processing), `gpu-particles`, `cinematic-footage` (AI footage, scroll-driven sequences) and `scene-3d` (models, water, splats). Known issue: the horizontal-scroll example in `gsap-scrolltrigger` is wrong (`Max.max` typo, pixels passed to `xPercent`); use `x: () => -(track.scrollWidth - window.innerWidth)` with `ease: "none"`.

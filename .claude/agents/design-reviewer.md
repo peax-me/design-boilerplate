@@ -21,9 +21,9 @@ The parent gives you one or more routes and the page's intent (its audience and 
    - **Alignment and balance:** shared edges or centres; symmetric compositions; no orphaned elements.
    - **Typography:** line length, line breaks in headings, muted text only for supporting content.
    - **Responsive behaviour:** order, density and touch comfort on mobile; no awkward wraps.
-   - **Motion:** every scene explains something; reduced motion shows a complete page. Score the signature scenes, and only those (the definition of done applies the grid there), on the `motion-review` grid (§3): ten criteria from 1 to 5, each with its evidence (§4). The motion passes when every criterion scores 4 or more, or criterion 6 is N/A for its stated reason, never on an average.
+   - **Motion:** every scene explains something; reduced motion shows a complete page. Score the signature scenes, and only those (the definition of done applies the grid there), on the `motion-review` grid (§3): eleven criteria from 1 to 5, each with its evidence (§4). The motion passes when every criterion scores 4 or more, or criterion 6 is N/A for its stated reason, never on an average.
    - **Copy:** specific, believable, free of filler and AI tells.
-4. For every finding, point to the component and prop to change (for example `Stack gap="lg"` → `gap="xl"` in `features/home/hero-section.tsx`). If the fix needs a new variant or token, say so explicitly. For a motion criterion under 4, name the scene, the evidence and the owning skill of the fix (`shader-craft`, `gpu-particles`, `cinematic-footage`, `scene-3d`, `scroll-storytelling`, `design-system`).
+4. For every finding, point to the component and prop to change (for example `Stack gap="lg"` → `gap="xl"` in `features/home/hero-section.tsx`). If the fix needs a new variant or token, say so explicitly. For a motion criterion under 4, name the scene, the evidence and the owning skill of the fix (`motion-design`, `shader-craft`, `gpu-particles`, `cinematic-footage`, `scene-3d`, `scroll-storytelling`, `design-system`).
 
 ## Output
 

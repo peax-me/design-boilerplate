@@ -19,9 +19,9 @@ This skill takes a brief to a verified page with no one in the loop, at the leve
   1. **Spend.** A Magnific call that would take the page above 30,000 credits. The ledger in `assets/provenance.json` and the stop's message follow `asset-production` §3: stop before the call, and list the options priced, the cheaper one first.
   2. **Technology.** A technical decision outside the accepted ADRs: a library, tool, service, pattern or configuration that neither ADR-0024 to ADR-0027 nor an earlier accepted ADR covers. Look first for a route inside the arsenal that tells the same beat, and log the comparison. If none exists, write the ADR with `status: proposed` (`adr` skill), then stop and report what waits on it.
 
-  Nothing else stops a run: an ambiguous brief, a missing fact, an optional source that is unavailable, a failed review round, a red check. Each one is decided, logged, and the run goes on. A check that no fix turns green ends the run with a failure report (§8): that is an end, not a pause.
+  Nothing else stops a run: an ambiguous brief, a missing fact, an optional source that is unavailable, a failed review round, a red check. Each one is decided, logged, and the run goes on. A check that no fix turns green ends the run with a failure report (§9): that is an end, not a pause.
 - **Arsenal ADRs not yet accepted.** If ADR-0024 to ADR-0028 are still `proposed` when the run starts, proceed: they define the arsenal this skill is built on and only wait for the user's acceptance. `pnpm check` then stays red on `adr:check` alone. It is the last step of the chain, so everything before it has passed. Say so in the final report. Never change an ADR's status. This is not hard stop 2, which concerns an ADR the run writes itself.
-- **The journal.** Log each decision as one entry under `## Decisions` in `DESIGN.md`: the step, what was chosen, over which alternatives, and the test the others failed. Plans go under `## Page: <name>` in `### Storyboard` and `### Assets`, as their skills say. `DESIGN.md` holds choices and plans, never token values (`theme.css` holds them). The user must be able to audit the whole run from that file alone.
+- **The journal.** Log each decision as one entry under `## Decisions` in `DESIGN.md`: the step, what was chosen, over which alternatives, and the test the others failed. The motion language goes under `## Motion language`. Plans go under `## Page: <name>` in `### Transitions`, `### Storyboard` and `### Assets`, as their skills say. `DESIGN.md` holds choices and plans, never token values (`theme.css` holds them). The user must be able to audit the whole run from that file alone.
 - **Resume.** After an interruption or a context reset, read `## Decisions`, the page section and the page's ledger entry, recompute `spent` from the entries (`asset-production` §3), and continue at the first step that has no record.
 
 ## Before step 1
@@ -32,7 +32,7 @@ This skill takes a brief to a verified page with no one in the loop, at the leve
 
 **The starter.** A project created from the boilerplate still carries its starter: a landing at `/` that pitches the boilerplate, the product context and direction that describe it, and the components and helpers only that landing uses. A run replaces all of it, because a client page never ships the boilerplate's pitch and `knip` fails on what is left unused:
 
-- `PRODUCT.md` and `.agents/product-marketing.md` are rewritten for the client (step 1). Step 2 replaces the direction sections of `DESIGN.md` (point of view, world, do, don't, references), and `## Decisions` starts with this run.
+- `PRODUCT.md` and `.agents/product-marketing.md` are rewritten for the client (step 1). Step 2 replaces the direction sections of `DESIGN.md` (point of view, world, do, don't, references), step 5 writes `## Motion language`, and `## Decisions` starts with this run.
 - The client's page replaces the starter at `/`. Remove the starter's feature folder in `apps/web/src/features/`, its tests and its images and media, and their entries in `assets/provenance.json`.
 - Then remove what only the starter used:
   - `@repo/ui` components with their stories, tests, `packages/ui/AGENTS.md` rows and Code Connect templates;
@@ -54,7 +54,7 @@ Run `project-kickoff` phase 1: `product-marketing` writes `.agents/product-marke
 
 ## 2. Direction
 
-Run `design-inspiration` in its autonomous mode (§5): the board in `DESIGN.md` with its captures in `.context/`, then two or three directions from `impeccable` `new-work`, the choice made by the four tests and logged. Then `design-system` "Retheme for a new project" turns the chosen direction into tokens and fonts (`project-kickoff` phase 3), and the Storybook review becomes a self-check. The direction's motion personality is the input of step 3.
+Run `design-inspiration` in its autonomous mode (§5): the board in `DESIGN.md` with its captures in `.context/`, then two or three directions from `impeccable` `new-work`, the choice made by the four tests and logged. Then `design-system` "Retheme for a new project" turns the chosen direction into tokens and fonts (`project-kickoff` phase 3), and the Storybook review becomes a self-check. The direction's motion personality is the input of steps 3 and 5.
 
 ## 3. Signature concepts
 
@@ -102,17 +102,27 @@ Only when the message fits two families equally, take the cheaper production: fe
 - The engine is WebGL2, and WebGPU is only for scenes past a million particles (ADR-0024; known conflicts in `AGENTS.md`).
 - Log the family, the row of the table, and the tie-break when one was needed.
 
-## 5. Storyboard
+## 5. Motion direction
 
-Write the section plan of `landing-page` §3, then the storyboard of `scroll-storytelling` §3 in its autonomous mode, under `### Storyboard`. It has two or three scenes, one of them the signature, each with a complete final state. When only one beat of the hierarchy has a sequence, a cause or a continuity to show, the page has that one scene, the signature, and the log says why: a thin second scene breaks `scroll-storytelling` §2.
+Write the section plan of `landing-page` §3 first: the transitions need the order of the sections and which of them are scenes. Then run `motion-design`, before any storyboard, because the storyboard's eases, staggers, directions and boundaries come from what it writes:
 
-Each block fills its `Pointer` line, saying what the pointer does or why it does nothing (a film-like shot, kinetic type), and a stage's block fills `Ambient` too. `motion-review` scores life at rest and the pointer against these declarations. Run the self-check of `landing-page` §4 before any code.
+- `## Motion language` in `DESIGN.md`, from the direction and the chosen concept (`motion-design` §1);
+- the page's `### Transitions` under `## Page: <name>`: one row per boundary between sections and per shot seam, none of them a forbidden default (`motion-design` §3);
+- the intensity of each scene, rising to the signature with a rest between peaks (`motion-design` §4).
 
-## 6. Visual plan and quote
+Run its self-check (`motion-design` §8) and log the archetype, the travel and the choice behind each row that is not a plain cut under `## Decisions`.
+
+## 6. Storyboard
+
+Write the storyboard of `scroll-storytelling` §3 in its autonomous mode, under `### Storyboard`. It has two or three scenes, one of them the signature, each with a complete final state. When only one beat of the hierarchy has a sequence, a cause or a continuity to show, the page has that one scene, the signature, and the log says why: a thin second scene breaks `scroll-storytelling` §2.
+
+Each block's first and last phases carry its rows of `### Transitions`, and it names its `Lead` and `Intensity` (`motion-design` §4). Each block fills its `Pointer` line, saying what the pointer does or why it does nothing (a film-like shot, kinetic type), and a stage's block fills `Ambient` too. `motion-review` scores life at rest and the pointer against these declarations. Run the self-check of `landing-page` §4 before any code.
+
+## 7. Visual plan and quote
 
 Run `asset-production` gates 1 and 2 in autonomous mode: the asset list under `### Assets`, the sourcing order, every paid call priced with `simulate_cost`, and the page's ledger opened with `cap: 30000` before the first paid call. The technique skills add their own rules: shots and drafts in `cinematic-footage` §2, models in `scene-3d` §2, shapes in `gpu-particles` §3. Plan the cheap route before quoting (`asset-production` §2), because the quote gate never re-plans. Hard stop 1 applies here and before every later paid call, retries included.
 
-## 7. Code
+## 8. Code
 
 - Tests come first (`tdd`).
 - The signature's technique skill builds its effect component and lazy scene in `@repo/ui`, on the `Stage` contract (`shader-craft` §2). `scroll-storytelling` §4 and §5 build the scenes, `landing-page` §5 the sections, and `design-system` anything missing.
@@ -121,7 +131,7 @@ Run `asset-production` gates 1 and 2 in autonomous mode: the asset list under `#
 - A library enters through the pnpm catalog under an accepted ADR (`shader-craft` §2). Anything else is hard stop 2.
 - Finish with `landing-page` §6 step 1: `copy-editing` on the final copy, then `cro` on the built page. Apply their fixes before the quality loop.
 
-## 8. Quality loop
+## 9. Quality loop
 
 In this order, each step starting once the one before passes. `pnpm check` counts as passed when only `adr:check` is red on the arsenal ADRs.
 
@@ -140,7 +150,7 @@ Rules:
 - If `motion-review` runs out of rounds without a pass, finish steps 2 to 5 and list the criteria still under 4 in the final report. This is not a stop.
 - The loop is done when steps 2 to 5 pass in one sweep after the last change, and `motion-review` has passed or used its five rounds.
 
-## 9. Deliverables
+## 10. Deliverables
 
 | Deliverable        | Where                                                                                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -148,7 +158,7 @@ Rules:
 | Recordings         | `scroll-desktop.webm`, `scroll-phone.webm` and `pointer-desktop.webm` from the last round in `.context/motion-review/<page>/`                                                        |
 | Contact sheets     | The sheets and strips of the same round, with `report.md`                                                                                                                            |
 | Lighthouse reports | `apps/web/.lighthouseci/mobile/` and `desktop/`, copied to `.context/signature-experience/<page>/lighthouse/` after the last run, since the next run overwrites them                 |
-| Decision journal   | `## Decisions` and `## Page: <name>` in `DESIGN.md`                                                                                                                                  |
+| Decision journal   | `## Decisions`, `## Motion language` and `## Page: <name>` in `DESIGN.md`                                                                                                            |
 | Spend              | The page's `spent` against its `cap` in `assets/provenance.json`                                                                                                                     |
 
 End with a short report to the user:
@@ -159,7 +169,7 @@ End with a short report to the user:
 - the credits spent out of 30,000, and the paths above;
 - every `[NEED: …]` placeholder, every criterion under 4 and every finding left open, with the reason.
 
-A run that ended on a failure (§8) delivers the same report, headed by the failure.
+A run that ended on a failure (§9) delivers the same report, headed by the failure.
 
 ## Plan only
 
@@ -168,6 +178,7 @@ When asked for the plan without producing anything, walk the same steps in the s
 ## Avoid
 
 - Choosing the technique before the concept, or the concept before the message.
+- A storyboard before the motion language and the transitions table, or a boundary left to a default crossfade or a stage sliding off as a box.
 - A single concept, or a cliché kept because it was recoloured.
 - The signature's family used twice on a page, more than three scenes, or a thin scene added to reach two.
 - Asking the user anything, or stopping for anything other than the two hard stops.
